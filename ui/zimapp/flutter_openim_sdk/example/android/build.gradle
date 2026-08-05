@@ -1,0 +1,42 @@
+buildscript {
+    repositories {
+        maven { url 'https://maven.aliyun.com/nexus/content/groups/public/' }
+        maven { url 'https://maven.aliyun.com/nexus/content/repositories/jcenter' }
+        maven { url 'https://maven.aliyun.com/nexus/content/repositories/google' }
+        maven { url 'https://maven.aliyun.com/nexus/content/repositories/gradle-plugin' }
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath 'com.android.tools.build:gradle:3.5.1'
+    }
+}
+
+allprojects {
+    repositories {
+        maven { url 'https://maven.aliyun.com/nexus/content/groups/public/' }
+        maven { url 'https://maven.aliyun.com/nexus/content/repositories/jcenter' }
+        maven { url 'https://maven.aliyun.com/nexus/content/repositories/google' }
+        maven { url 'https://maven.aliyun.com/nexus/content/repositories/gradle-plugin' }
+        google()
+        mavenCentral()
+    }
+}
+
+// Store values at configuration time to avoid project access during task execution
+def rootBuildDir = file('../build')
+rootProject.buildDir = rootBuildDir
+
+subprojects {
+    // Capture project-specific values at configuration time
+    def projectName = project.name
+    def projectBuildDir = "${rootBuildDir}/${projectName}"
+    
+    project.buildDir = projectBuildDir
+    project.evaluationDependsOn(':app')
+}
+
+tasks.register("clean", Delete) {
+    delete rootBuildDir
+}

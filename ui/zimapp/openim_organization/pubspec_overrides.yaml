@@ -1,0 +1,4 @@
+# melos_managed_dependency_overrides: openim_common
+dependency_overrides:
+  openim_common:
+    path: ../openim_common

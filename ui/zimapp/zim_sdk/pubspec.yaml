@@ -1,0 +1,19 @@
+name: zim_sdk
+description: Pure-Dart IM SDK for zim backend. Replaces flutter_openim_sdk native bindings with HTTP/JSON + WebSocket.
+version: 0.1.0
+publish_to: "none"
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+  flutter: ">=3.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  dio: ^5.7.0
+  web_socket_channel: ^3.0.1
+  sqflite: ^2.4.0
+  path_provider: ^2.1.2
+  path: ^1.9.0
+  uuid: ^4.2.1
+  crypto: ^3.0.2

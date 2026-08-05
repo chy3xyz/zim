@@ -1,0 +1,18 @@
+name: openim
+packages:
+  - .
+  - openim_common
+  - openim_organization
+  - openim_working_circle
+
+command:
+  bootstrap:
+    runPubGetInParallel: true
+
+scripts:
+  pub_upgrade: melos exec -- flutter pub upgrade
+  pub_outdated: melos exec -- flutter pub outdated
+  pub_get: |
+    dart run tool/sync_versions.dart && \
+    melos bootstrap && \
+    melos exec -- flutter pub get

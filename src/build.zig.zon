@@ -1,0 +1,17 @@
+.{
+    .name = .zim,
+    .version = "0.3.0",
+    .fingerprint = 0x211bf99f45fc944e,
+    .minimum_zig_version = "0.16.0",
+    .dependencies = .{
+        .zigmodu = .{
+            .path = "../../../zig_ws/zigmodu",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "main.zig",
+        "modules/",
+    },
+}

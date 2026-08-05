@@ -1,0 +1,76 @@
+buildscript { 
+    repositories { 
+        google() 
+        mavenCentral()
+        maven { url 'https://developer.huawei.com/repo/' }
+    } 
+    dependencies { 
+        classpath 'com.android.tools.build:gradle:8.9.1'
+        classpath 'com.huawei.agconnect:agcp:1.9.3.302'
+        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.0'
+    } 
+}
+
+allprojects {
+    afterEvaluate { project ->
+        if (project.hasProperty("android")) {
+            project.android {
+                // Fix for plugins missing namespace in Android Gradle Plugin 8.x
+                if (namespace == null || namespace.isEmpty()) {
+                    def manifestFile = project.file("src/main/AndroidManifest.xml")
+                    if (manifestFile.exists()) {
+                        def manifestContent = manifestFile.text
+                        def matcher = manifestContent =~ /package="([^"]+)"/
+                        if (matcher.find()) {
+                            namespace = matcher.group(1)
+                        }
+                    }
+                    if (namespace == null || namespace.isEmpty()) {
+                        namespace = project.group.toString() + "." + project.name
+                    }
+                }
+                // Ensure compileSdk is set
+                if (compileSdkVersion == null) {
+                    compileSdk 35
+                }
+            }
+        }
+    }
+    repositories {
+        google()
+        mavenCentral()
+        maven { url 'https://developer.huawei.com/repo/' }
+        maven {
+            url 'https://maven.columbus.heytapmobi.com/repository/releases/'
+            credentials { username 'nexus'; password 'c0b08da17e3ec36c3870fed674a0bcb36abc2e23' }
+        }
+        // maven { url 'https://mvn.getui.com/nexus/content/repositories/releases/' }
+    }
+}
+
+def newBuildDir = rootProject.layout.buildDirectory.dir("../../build").get()
+rootProject.layout.buildDirectory.set(newBuildDir)
+
+subprojects {
+    def newSubprojectBuildDir = newBuildDir.dir(project.name)
+    project.layout.buildDirectory.set(newSubprojectBuildDir)
+}
+
+subprojects {
+    project.evaluationDependsOn(":app")
+}
+
+configurations.all {
+    resolutionStrategy {
+        force 'androidx.core:core-ktx:1.12.0'
+        force 'androidx.core:core:1.12.0'
+        force 'androidx.activity:activity:1.8.2'
+        force 'androidx.activity:activity-ktx:1.8.2'
+        force 'androidx.fragment:fragment:1.6.2'
+        force 'androidx.fragment:fragment-ktx:1.6.2'
+    }
+}
+
+tasks.register("clean", Delete) {
+    delete rootProject.layout.buildDirectory
+}

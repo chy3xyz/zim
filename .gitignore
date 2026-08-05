@@ -1,0 +1,21 @@
+# Zig build artifacts
+.zig-cache/
+zig-out/
+.zmodu-build/
+.zmodu-cache/
+.zmodu-test-cache/
+
+# macOS / IDE
+.DS_Store
+.codegraph/
+.cursor/
+
+# Reference implementations (external, read-only)
+_ref/
+
+# Node / Flutter build artifacts
+ui/**/node_modules/
+ui/**/build/
+ui/**/.dart_tool/
+ui/**/Pods/
+*.log

@@ -1,0 +1,29 @@
+{
+  "database": {
+    "host": "localhost",
+    "port": 5432,
+    "name": "zim",
+    "user": "zim",
+    "password": "",
+    "max_conns": 100,
+    "min_conns": 10
+  },
+  "gateway": {
+    "host": "0.0.0.0",
+    "http_port": 10000,
+    "ws_port": 10001
+  },
+  "jwt": {
+    "secret": "change-me-in-production",
+    "expiry_hours": 24
+  },
+  "redis": {
+    "host": "localhost",
+    "port": 6379,
+    "password": "",
+    "db": 0
+  },
+  "queue": {
+    "poll_timeout_ms": 5000
+  }
+}

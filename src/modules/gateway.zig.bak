@@ -1,0 +1,538 @@
+const std = @import("std");
+const core = @import("core");
+const zigmodu = @import("zigmodu");
+const config_mod = @import("config.zig");
+const auth_mod = @import("auth.zig");
+const user_mod = @import("user.zig");
+const conversation_mod = @import("conversation.zig");
+const message_mod = @import("message.zig");
+const group_mod = @import("group.zig");
+const friend_mod = @import("friend.zig");
+const push_mod = @import("push.zig");
+const office_mod = @import("office.zig");
+const organization_mod = @import("organization.zig");
+const third_mod = @import("third.zig");
+const ws_module = @import("websocket.zig");
+const model = @import("gateway/model.zig");
+const gw_root = @import("gateway/root.zig");
+
+// Re-export public API
+pub const info = gw_root.info;
+pub const HttpMethod = model.HttpMethod;
+pub const HttpRequest = model.HttpRequest;
+pub const HttpResponse = model.HttpResponse;
+pub const Route = model.Route;
+pub const RouteHandler = model.RouteHandler;
+pub const GatewayModule = gw_root.GatewayModule;
+
+pub fn deinit() void {
+    gw_root.deinit();
+}
+
+pub fn getGateway() *gw_root.GatewayModule {
+    return gw_root.getGateway();
+}
+
+pub fn setHttpIo(io: std.Io) void {
+    gw_root.setHttpIo(io);
+}
+
+pub fn startHttpServer() !void {
+    return gw_root.startHttpServer();
+}
+
+// Type aliases for handlers (keep handler code unchanged)
+const MemberInfo = model.MemberInfo;
+const UserElement = model.UserElement;
+const MemberUser = model.MemberUser;
+const SearchResultItem = model.SearchResultItem;
+const RtcParticipant = model.RtcParticipant;
+const RtcMeeting = model.RtcMeeting;
+
+// RTC helper aliases
+const getRtcMeetings = gw_root.getRtcMeetings;
+const getRtcParticipants = gw_root.getRtcParticipants;
+const generateRoomID = gw_root.generateRoomID;
+const rtcLock = gw_root.rtcLock;
+const rtcUnlock = gw_root.rtcUnlock;
+const currentMillis = gw_root.currentMillis;
+
+pub fn init() !void {
+    const allocator = core.getAllocator();
+    gw_root.g_gateway = gw_root.GatewayModule.init(allocator);
+    var gw = &gw_root.g_gateway.?;
+
+    // Auth routes (no auth required)
+    try gw.addRoute(.POST, "/auth/get_user_token", handleGetUserToken, false);
+    try gw.addRoute(.POST, "/auth/get_admin_token", handleGetAdminToken, false);
+    try gw.addRoute(.POST, "/auth/parse_token", handleParseToken, false);
+    try gw.addRoute(.POST, "/auth/force_logout", handleForceLogout, true);
+
+    // OpenChat-compatible auth routes
+    try gw.addRoute(.POST, "/account/login", handleAccountLogin, false);
+    try gw.addRoute(.POST, "/account/register", handleAccountRegister, false);
+    try gw.addRoute(.POST, "/account/code/send", handleSendVerificationCode, false);
+    try gw.addRoute(.POST, "/account/code/verify", handleVerifyCode, false);
+    try gw.addRoute(.POST, "/account/password/reset", handleResetPassword, false);
+    try gw.addRoute(.POST, "/account/password/change", handleChangePassword, true);
+    try gw.addRoute(.POST, "/account/info", handleAccountInfo, true);
+
+    // Health check
+    try gw.addRoute(.GET, "/health", handleHealth, false);
+
+    // User routes
+    try gw.addRoute(.POST, "/user/user_register", handleUserRegister, false);
+    try gw.addRoute(.POST, "/user/unregister_user", handleUnregisterUser, true);
+    try gw.addRoute(.POST, "/user/update_user_info", handleUpdateUserInfo, true);
+    try gw.addRoute(.POST, "/user/update_user_info_ex", handleUpdateUserInfoEx, true);
+    try gw.addRoute(.POST, "/user/get_users_info", handleGetUsersInfo, true);
+    try gw.addRoute(.POST, "/user/get_all_users_uid", handleGetAllUsersID, true);
+    try gw.addRoute(.POST, "/user/account_check", handleAccountCheck, true);
+    try gw.addRoute(.POST, "/user/get_users", handleGetUsers, true);
+    try gw.addRoute(.POST, "/user/find/full", handleGetUsersFullInfo, true);
+    try gw.addRoute(.POST, "/user/search/full", handleSearchUsersFullInfo, true);
+    try gw.addRoute(.POST, "/user/get_users_online_status", handleGetUsersOnlineStatus, true);
+    try gw.addRoute(.POST, "/user/get_users_online_token_detail", handleGetUsersOnlineTokenDetail, true);
+    try gw.addRoute(.POST, "/user/set_global_msg_recv_opt", handleSetGlobalRecvMsgOpt, true);
+    try gw.addRoute(.POST, "/user/subscribe_users_status", handleSubscribeUsersStatus, true);
+    try gw.addRoute(.POST, "/user/get_users_status", handleGetUsersStatus, true);
+    try gw.addRoute(.POST, "/user/get_subscribe_users_status", handleGetSubscribeUsersStatus, true);
+    try gw.addRoute(.POST, "/user/user_register_count", handleUserRegisterCount, true);
+    try gw.addRoute(.POST, "/user/process_user_command_add", handleProcessUserCommandAdd, true);
+    try gw.addRoute(.POST, "/user/process_user_command_delete", handleProcessUserCommandDelete, true);
+    try gw.addRoute(.POST, "/user/process_user_command_update", handleProcessUserCommandUpdate, true);
+    try gw.addRoute(.POST, "/user/process_user_command_get", handleProcessUserCommandGet, true);
+    try gw.addRoute(.POST, "/user/process_user_command_get_all", handleProcessUserCommandGetAll, true);
+
+    // Friend routes
+    try gw.addRoute(.POST, "/friend/add_friend", handleAddFriend, true);
+    try gw.addRoute(.POST, "/friend/add_friend_response", handleFriendResponse, true);
+    try gw.addRoute(.POST, "/friend/get_friend_list", handleGetFriendList, true);
+    try gw.addRoute(.POST, "/friend/get_friend_apply_list", handleGetFriendApplyList, true);
+    try gw.addRoute(.POST, "/friend/get_designated_friend_apply", handleGetDesignatedFriendApply, true);
+    try gw.addRoute(.POST, "/friend/get_self_friend_apply_list", handleGetSelfApplyList, true);
+    try gw.addRoute(.POST, "/friend/get_designated_friends", handleGetDesignatedFriends, true);
+    try gw.addRoute(.POST, "/friend/delete_friend", handleDeleteFriend, true);
+    try gw.addRoute(.POST, "/friend/set_friend_remark", handleSetFriendRemark, true);
+    try gw.addRoute(.POST, "/friend/add_black", handleAddBlack, true);
+    try gw.addRoute(.POST, "/friend/get_black_list", handleGetBlackList, true);
+    try gw.addRoute(.POST, "/friend/get_specified_blacks", handleGetSpecifiedBlacks, true);
+    try gw.addRoute(.POST, "/friend/remove_black", handleRemoveBlack, true);
+    try gw.addRoute(.POST, "/friend/get_incremental_blacks", handleGetIncrementalBlacks, true);
+    try gw.addRoute(.POST, "/friend/import_friend", handleImportFriend, true);
+    try gw.addRoute(.POST, "/friend/is_friend", handleIsFriend, true);
+    try gw.addRoute(.POST, "/friend/get_friend_id", handleGetFriendID, true);
+    try gw.addRoute(.POST, "/friend/get_specified_friends_info", handleGetSpecifiedFriendsInfo, true);
+    try gw.addRoute(.POST, "/friend/update_friends", handleUpdateFriends, true);
+    try gw.addRoute(.POST, "/friend/search", handleSearchFriendInfo, true);
+    try gw.addRoute(.POST, "/friend/get_incremental_friends", handleGetIncrementalFriends, true);
+    try gw.addRoute(.POST, "/friend/get_full_friend_user_ids", handleGetFullFriendUserIDs, true);
+    try gw.addRoute(.POST, "/friend/get_self_unhandled_apply_count", handleGetSelfUnhandledApplyCount, true);
+    try gw.addRoute(.POST, "/friend/delete_friend_requests_from_user", handleDeleteFriendRequestsFromUser, true);
+    try gw.addRoute(.POST, "/friend/delete_friend_requests_to_user", handleDeleteFriendRequestsToUser, true);
+
+    // Group routes
+    try gw.addRoute(.POST, "/group/create_group", handleCreateGroup, true);
+    try gw.addRoute(.POST, "/group/set_group_info", handleSetGroupInfo, true);
+    try gw.addRoute(.POST, "/group/get_groups_info", handleGetGroupsInfo, true);
+    try gw.addRoute(.POST, "/group/get_group_member_list", handleGetGroupMemberList, true);
+    try gw.addRoute(.POST, "/group/get_group_members_info", handleGetGroupMembersInfo, true);
+    try gw.addRoute(.POST, "/group/invite_user_to_group", handleInviteToGroup, true);
+    try gw.addRoute(.POST, "/group/kick_group", handleKickFromGroup, true);
+    try gw.addRoute(.POST, "/group/quit_group", handleQuitGroup, true);
+    try gw.addRoute(.POST, "/group/dismiss_group", handleDismissGroup, true);
+    try gw.addRoute(.POST, "/group/get_joined_group_list", handleGetJoinedGroupList, true);
+    try gw.addRoute(.POST, "/group/transfer_group", handleTransferGroup, true);
+    try gw.addRoute(.POST, "/group/set_group_member_info", handleSetGroupMemberInfo, true);
+    try gw.addRoute(.POST, "/group/mute_group_member", handleMuteGroupMember, true);
+    try gw.addRoute(.POST, "/group/cancel_mute_group_member", handleCancelMuteGroupMember, true);
+    try gw.addRoute(.POST, "/group/mute_group", handleMuteGroup, true);
+    try gw.addRoute(.POST, "/group/cancel_mute_group", handleCancelMuteGroup, true);
+    try gw.addRoute(.POST, "/group/join_group", handleJoinGroup, true);
+    try gw.addRoute(.POST, "/group/group_application_response", handleGroupApplicationResponse, true);
+    try gw.addRoute(.POST, "/group/get_recv_group_applicationList", handleGetRecvGroupApplications, true);
+    try gw.addRoute(.POST, "/group/get_user_req_group_applicationList", handleGetUserReqGroupApplications, true);
+    try gw.addRoute(.POST, "/group/get_group_users_req_application_list", handleGetGroupUsersReqApplicationList, true);
+    try gw.addRoute(.POST, "/group/get_specified_user_group_request_info", handleGetSpecifiedUserGroupRequestInfo, true);
+    try gw.addRoute(.POST, "/group/set_group_info_ex", handleSetGroupInfoEx, true);
+    try gw.addRoute(.POST, "/group/get_group_abstract_info", handleGetGroupAbstractInfo, true);
+    try gw.addRoute(.POST, "/group/get_groups", handleGetGroups, true);
+    try gw.addRoute(.POST, "/group/get_group_member_user_id", handleGetGroupMemberUserIDs, true);
+    try gw.addRoute(.POST, "/group/get_incremental_join_groups", handleGetIncrementalJoinGroups, true);
+    try gw.addRoute(.POST, "/group/get_incremental_group_members", handleGetIncrementalGroupMembers, true);
+    try gw.addRoute(.POST, "/group/get_incremental_group_members_batch", handleGetIncrementalGroupMembersBatch, true);
+    try gw.addRoute(.POST, "/group/get_full_group_member_user_ids", handleGetFullGroupMemberUserIDs, true);
+    try gw.addRoute(.POST, "/group/get_full_join_group_ids", handleGetFullJoinGroupIDs, true);
+    try gw.addRoute(.POST, "/group/get_group_application_unhandled_count", handleGetGroupApplicationUnheandledCount, true);
+    try gw.addRoute(.POST, "/group/delete_group_requests_from_user", handleDeleteGroupRequestsFromUser, true);
+    try gw.addRoute(.POST, "/group/delete_group_requests_to_group", handleDeleteGroupRequestsToGroup, true);
+
+    // Message routes
+    try gw.addRoute(.POST, "/msg/send_msg", handleSendMessage, true);
+    try gw.addRoute(.POST, "/msg/send_business_notification", handleSendBusinessNotification, true);
+    try gw.addRoute(.POST, "/msg/batch_send_msg", handleBatchSendMsg, true);
+    try gw.addRoute(.POST, "/msg/pull_msg_by_seq", handlePullMsgBySeqs, true);
+    try gw.addRoute(.POST, "/msg/revoke_msg", handleRevokeMsg, true);
+    try gw.addRoute(.POST, "/msg/modify_message", handleModifyMessage, true);
+    try gw.addRoute(.POST, "/msg/delete_msgs", handleDeleteMsgs, true);
+    try gw.addRoute(.POST, "/msg/mark_msgs_as_read", handleMarkMsgsAsRead, true);
+    try gw.addRoute(.POST, "/msg/mark_conversation_as_read", handleMarkConversationAsRead, true);
+    try gw.addRoute(.POST, "/msg/get_conversations_has_read_and_max_seq", handleGetConversationsHasReadAndMaxSeq, true);
+    try gw.addRoute(.POST, "/msg/set_conversation_has_read_seq", handleSetConversationHasReadSeq, true);
+    try gw.addRoute(.POST, "/msg/clear_conversation_msg", handleClearConversationMsg, true);
+    try gw.addRoute(.POST, "/msg/user_clear_all_msg", handleUserClearAllMsg, true);
+    try gw.addRoute(.POST, "/msg/delete_msg_phsical_by_seq", handleDeleteMsgPhysicalBySeq, true);
+    try gw.addRoute(.POST, "/msg/delete_msg_physical", handleDeleteMsgPhysical, true);
+    try gw.addRoute(.POST, "/msg/search_msg", handleSearchMsg, true);
+    try gw.addRoute(.POST, "/msg/newest_seq", handleGetSeq, true);
+    try gw.addRoute(.POST, "/msg/check_msg_is_send_success", handleCheckMsgIsSendSuccess, true);
+    try gw.addRoute(.POST, "/msg/get_server_time", handleGetServerTime, false);
+    try gw.addRoute(.POST, "/msg/mark_group_message_read", handleMarkGroupMessageRead, true);
+    try gw.addRoute(.POST, "/msg/get_group_message_read_num", handleGetGroupMessageReadNum, true);
+    try gw.addRoute(.POST, "/msg/get_group_message_has_read", handleGetGroupMessageHasRead, true);
+    try gw.addRoute(.POST, "/msg/mark_user_message_read", handleMarkUserMessageRead, true);
+    try gw.addRoute(.POST, "/msg/mark_conversation_read", handleMarkConversationRead, true);
+
+    // Conversation routes
+    try gw.addRoute(.POST, "/conversation/get_sorted_conversation_list", handleGetSortedConversationList, true);
+    try gw.addRoute(.POST, "/conversation/get_all_conversations", handleGetAllConversations, true);
+    try gw.addRoute(.POST, "/conversation/get_conversation", handleGetConversation, true);
+    try gw.addRoute(.POST, "/conversation/get_conversations", handleGetConversations, true);
+    try gw.addRoute(.POST, "/conversation/set_conversations", handleSetConversations, true);
+    try gw.addRoute(.POST, "/conversation/get_conversation_offline_push_user_ids", handleGetConversationOfflinePushUserIDs, true);
+    try gw.addRoute(.POST, "/conversation/get_full_conversation_ids", handleGetFullConversationIDs, true);
+    try gw.addRoute(.POST, "/conversation/get_incremental_conversations", handleGetIncrementalConversations, true);
+    try gw.addRoute(.POST, "/conversation/get_owner_conversation", handleGetOwnerConversation, true);
+    try gw.addRoute(.POST, "/conversation/get_not_notify_conversation_ids", handleGetNotNotifyConversationIDs, true);
+    try gw.addRoute(.POST, "/conversation/get_pinned_conversation_ids", handleGetPinnedConversationIDs, true);
+
+    // Encryption routes
+    try gw.addRoute(.POST, "/encryption/get_encryption_key", handleGetEncryptionKey, true);
+    try gw.addRoute(.POST, "/encryption/gen_encryption_key", handleGenEncryptionKey, true);
+
+    // Office routes (work moments)
+    try gw.addRoute(.POST, "/office/work_moment/add", handleCreateWorkMoment, true);
+    try gw.addRoute(.POST, "/office/work_moment/del", handleDeleteWorkMoment, true);
+    try gw.addRoute(.POST, "/office/work_moment/get", handleGetWorkMoment, true);
+    try gw.addRoute(.POST, "/office/work_moment/find/recv", handleGetRecvWorkMoments, true);
+    try gw.addRoute(.POST, "/office/work_moment/find/send", handleGetSendWorkMoments, true);
+    try gw.addRoute(.POST, "/office/work_moment/like", handleLikeWorkMoment, true);
+    try gw.addRoute(.POST, "/office/work_moment/comment/add", handleAddComment, true);
+    try gw.addRoute(.POST, "/office/work_moment/comment/del", handleDeleteComment, true);
+    try gw.addRoute(.POST, "/office/work_moment/logs", handleGetWorkMomentLogs, true);
+    try gw.addRoute(.POST, "/office/work_moment/unread/clear", handleClearUnreadWorkMoments, true);
+    try gw.addRoute(.POST, "/office/work_moment/unread/count", handleGetUnreadWorkMomentsCount, true);
+
+    // Tag routes
+    try gw.addRoute(.POST, "/office/tag/find/user", handleGetUserTags, true);
+    try gw.addRoute(.POST, "/office/tag/add", handleCreateTag, true);
+    try gw.addRoute(.POST, "/office/tag/del", handleDeleteTag, true);
+    try gw.addRoute(.POST, "/office/tag/set", handleUpdateTag, true);
+
+    // Collect / Favorite routes
+    try gw.addRoute(.POST, "/collect/add", handleAddFavoriteMessage, true);
+    try gw.addRoute(.POST, "/collect/del", handleRemoveFavoriteMessage, true);
+    try gw.addRoute(.POST, "/collect/list", handleGetFavoriteMessages, true);
+
+    // Client config routes
+    try gw.addRoute(.POST, "/client_config/get", handleGetClientConfig, true);
+
+    // Organization routes
+    try gw.addRoute(.POST, "/organization/info", handleGetOrganization, true);
+    try gw.addRoute(.POST, "/organization/department/find", handleGetDepartments, true);
+    try gw.addRoute(.POST, "/organization/user/department", handleGetUsersInDepartments, true);
+    try gw.addRoute(.POST, "/organization/department/child", handleGetSubDepartmentsAndMembers, true);
+    try gw.addRoute(.POST, "/user/search/organization/full", handleSearchOrganizationUsers, true);
+
+    // Third-party service routes (stub - S3/MinIO integration TODO)
+    try gw.addRoute(.POST, "/third/fcm_update_token", handleFCMUpdateToken, true);
+    try gw.addRoute(.POST, "/third/set_app_badge", handleSetAppBadge, true);
+    try gw.addRoute(.POST, "/third/logs/upload", handleUploadLogs, true);
+    try gw.addRoute(.POST, "/third/logs/search", handleSearchLogs, true);
+    try gw.addRoute(.POST, "/object/part_limit", handleObjectPartLimit, true);
+    try gw.addRoute(.POST, "/object/auth_sign", handleObjectAuthSign, true);
+    try gw.addRoute(.POST, "/object/access_url", handleObjectAccessUrl, true);
+
+    // Statistics routes
+    try gw.addRoute(.POST, "/statistics/user/register", handleStatisticsUserRegister, true);
+    try gw.addRoute(.POST, "/statistics/user/active", handleStatisticsUserActive, true);
+    try gw.addRoute(.POST, "/statistics/group/create", handleStatisticsGroupCreate, true);
+    try gw.addRoute(.POST, "/statistics/group/active", handleStatisticsGroupActive, true);
+
+    // RTC meeting routes
+    try gw.addRoute(.POST, "/rtc-meeting/create", handleRTCMeetingCreate, true);
+    try gw.addRoute(.POST, "/rtc-meeting/join", handleRTCMeetingJoin, true);
+    try gw.addRoute(.POST, "/rtc-meeting/leave", handleRTCMeetingLeave, true);
+    try gw.addRoute(.POST, "/rtc-meeting/close", handleRTCMeetingClose, true);
+    try gw.addRoute(.POST, "/rtc-meeting/info", handleRTCMeetingInfo, true);
+    try gw.addRoute(.POST, "/rtc-meeting/list", handleRTCMeetingList, true);
+    try gw.addRoute(.POST, "/rtc-meeting/mute", handleRTCMeetingMute, true);
+    try gw.addRoute(.POST, "/rtc-meeting/unmute", handleRTCMeetingUnmute, true);
+    try gw.addRoute(.POST, "/rtc-meeting/video_on", handleRTCMeetingVideoOn, true);
+    try gw.addRoute(.POST, "/rtc-meeting/video_off", handleRTCMeetingVideoOff, true);
+    try gw.addRoute(.POST, "/rtc-meeting/kick", handleRTCMeetingKick, true);
+    try gw.addRoute(.POST, "/rtc-meeting/transfer_host", handleRTCMeetingTransferHost, true);
+    try gw.addRoute(.POST, "/rtc-meeting/set_layout", handleRTCMeetingSetLayout, true);
+    try gw.addRoute(.POST, "/rtc-meeting/record/start", handleRTCMeetingRecordStart, true);
+    try gw.addRoute(.POST, "/rtc-meeting/record/stop", handleRTCMeetingRecordStop, true);
+    try gw.addRoute(.POST, "/rtc-meeting/signal", handleRTCMeetingSignal, true);
+    try gw.addRoute(.POST, "/rtc-meeting/invite", handleRTCMeetingInvite, true);
+    try gw.addRoute(.POST, "/rtc-meeting/reject", handleRTCMeetingReject, true);
+    try gw.addRoute(.POST, "/rtc-meeting/accept", handleRTCMeetingAccept, true);
+
+    // Prometheus metrics endpoint
+    try gw.addRoute(.GET, "/metrics", handlePrometheusMetrics, false);
+
+    std.log.info("GatewayModule initialized with {d} routes", .{gw.routes.items.len});
+}
+
+// ============================================
+// AUTH HANDLERS
+// ============================================
+
+
+const handlers_auth = @import("handlers/auth.zig");
+const handlers_conversation = @import("handlers/conversation.zig");
+const handlers_friend = @import("handlers/friend.zig");
+const handlers_group = @import("handlers/group.zig");
+const handlers_message = @import("handlers/message.zig");
+const handlers_office = @import("handlers/office.zig");
+const handlers_organization = @import("handlers/organization.zig");
+const handlers_rtc = @import("handlers/rtc.zig");
+const handlers_stats = @import("handlers/stats.zig");
+const handlers_third = @import("handlers/third.zig");
+const handlers_user = @import("handlers/user.zig");
+
+pub fn init() !void {
+    const allocator = core.getAllocator();
+    gw_root.g_gateway = gw_root.GatewayModule.init(allocator);
+    var gw = &gw_root.g_gateway.?;
+
+    // Auth routes (no auth required)
+    try gw.addRoute(.POST, "/auth/get_user_token", handlers_auth.handleGetUserToken, false);
+    try gw.addRoute(.POST, "/auth/get_admin_token", handlers_auth.handleGetAdminToken, false);
+    try gw.addRoute(.POST, "/auth/parse_token", handlers_auth.handleParseToken, false);
+    try gw.addRoute(.POST, "/auth/force_logout", handlers_auth.handleForceLogout, true);
+
+    // OpenChat-compatible auth routes
+    try gw.addRoute(.POST, "/account/login", handlers_auth.handleAccountLogin, false);
+    try gw.addRoute(.POST, "/account/register", handlers_auth.handleAccountRegister, false);
+    try gw.addRoute(.POST, "/account/code/send", handlers_auth.handleSendVerificationCode, false);
+    try gw.addRoute(.POST, "/account/code/verify", handlers_auth.handleVerifyCode, false);
+    try gw.addRoute(.POST, "/account/password/reset", handlers_auth.handleResetPassword, false);
+    try gw.addRoute(.POST, "/account/password/change", handlers_auth.handleChangePassword, true);
+    try gw.addRoute(.POST, "/account/info", handlers_user.handleAccountInfo, true);
+
+    // Health check
+    try gw.addRoute(.GET, "/health", handlers_stats.handleHealth, false);
+
+    // User routes
+    try gw.addRoute(.POST, "/user/user_register", handlers_user.handleUserRegister, false);
+    try gw.addRoute(.POST, "/user/unregister_user", handlers_user.handleUnregisterUser, true);
+    try gw.addRoute(.POST, "/user/update_user_info", handlers_user.handleUpdateUserInfo, true);
+    try gw.addRoute(.POST, "/user/update_user_info_ex", handlers_user.handleUpdateUserInfoEx, true);
+    try gw.addRoute(.POST, "/user/get_users_info", handlers_user.handleGetUsersInfo, true);
+    try gw.addRoute(.POST, "/user/get_all_users_uid", handlers_user.handleGetAllUsersID, true);
+    try gw.addRoute(.POST, "/user/account_check", handlers_user.handleAccountCheck, true);
+    try gw.addRoute(.POST, "/user/get_users", handlers_user.handleGetUsers, true);
+    try gw.addRoute(.POST, "/user/find/full", handlers_user.handleGetUsersFullInfo, true);
+    try gw.addRoute(.POST, "/user/search/full", handlers_user.handleSearchUsersFullInfo, true);
+    try gw.addRoute(.POST, "/user/get_users_online_status", handlers_user.handleGetUsersOnlineStatus, true);
+    try gw.addRoute(.POST, "/user/get_users_online_token_detail", handlers_user.handleGetUsersOnlineTokenDetail, true);
+    try gw.addRoute(.POST, "/user/set_global_msg_recv_opt", handlers_user.handleSetGlobalRecvMsgOpt, true);
+    try gw.addRoute(.POST, "/user/subscribe_users_status", handlers_user.handleSubscribeUsersStatus, true);
+    try gw.addRoute(.POST, "/user/get_users_status", handlers_user.handleGetUsersStatus, true);
+    try gw.addRoute(.POST, "/user/get_subscribe_users_status", handlers_user.handleGetSubscribeUsersStatus, true);
+    try gw.addRoute(.POST, "/user/user_register_count", handlers_user.handleUserRegisterCount, true);
+    try gw.addRoute(.POST, "/user/process_user_command_add", handlers_user.handleProcessUserCommandAdd, true);
+    try gw.addRoute(.POST, "/user/process_user_command_delete", handlers_user.handleProcessUserCommandDelete, true);
+    try gw.addRoute(.POST, "/user/process_user_command_update", handlers_user.handleProcessUserCommandUpdate, true);
+    try gw.addRoute(.POST, "/user/process_user_command_get", handlers_user.handleProcessUserCommandGet, true);
+    try gw.addRoute(.POST, "/user/process_user_command_get_all", handlers_user.handleProcessUserCommandGetAll, true);
+
+    // Friend routes
+    try gw.addRoute(.POST, "/friend/add_friend", handlers_friend.handleAddFriend, true);
+    try gw.addRoute(.POST, "/friend/add_friend_response", handlers_friend.handleFriendResponse, true);
+    try gw.addRoute(.POST, "/friend/get_friend_list", handlers_friend.handleGetFriendList, true);
+    try gw.addRoute(.POST, "/friend/get_friend_apply_list", handlers_friend.handleGetFriendApplyList, true);
+    try gw.addRoute(.POST, "/friend/get_designated_friend_apply", handlers_friend.handleGetDesignatedFriendApply, true);
+    try gw.addRoute(.POST, "/friend/get_self_friend_apply_list", handlers_friend.handleGetSelfApplyList, true);
+    try gw.addRoute(.POST, "/friend/get_designated_friends", handlers_friend.handleGetDesignatedFriends, true);
+    try gw.addRoute(.POST, "/friend/delete_friend", handlers_friend.handleDeleteFriend, true);
+    try gw.addRoute(.POST, "/friend/set_friend_remark", handlers_friend.handleSetFriendRemark, true);
+    try gw.addRoute(.POST, "/friend/add_black", handlers_friend.handleAddBlack, true);
+    try gw.addRoute(.POST, "/friend/get_black_list", handlers_friend.handleGetBlackList, true);
+    try gw.addRoute(.POST, "/friend/get_specified_blacks", handlers_friend.handleGetSpecifiedBlacks, true);
+    try gw.addRoute(.POST, "/friend/remove_black", handlers_friend.handleRemoveBlack, true);
+    try gw.addRoute(.POST, "/friend/get_incremental_blacks", handlers_friend.handleGetIncrementalBlacks, true);
+    try gw.addRoute(.POST, "/friend/import_friend", handlers_friend.handleImportFriend, true);
+    try gw.addRoute(.POST, "/friend/is_friend", handlers_friend.handleIsFriend, true);
+    try gw.addRoute(.POST, "/friend/get_friend_id", handlers_friend.handleGetFriendID, true);
+    try gw.addRoute(.POST, "/friend/get_specified_friends_info", handlers_friend.handleGetSpecifiedFriendsInfo, true);
+    try gw.addRoute(.POST, "/friend/update_friends", handlers_friend.handleUpdateFriends, true);
+    try gw.addRoute(.POST, "/friend/search", handlers_friend.handleSearchFriendInfo, true);
+    try gw.addRoute(.POST, "/friend/get_incremental_friends", handlers_friend.handleGetIncrementalFriends, true);
+    try gw.addRoute(.POST, "/friend/get_full_friend_user_ids", handlers_friend.handleGetFullFriendUserIDs, true);
+    try gw.addRoute(.POST, "/friend/get_self_unhandled_apply_count", handlers_friend.handleGetSelfUnhandledApplyCount, true);
+    try gw.addRoute(.POST, "/friend/delete_friend_requests_from_user", handlers_friend.handleDeleteFriendRequestsFromUser, true);
+    try gw.addRoute(.POST, "/friend/delete_friend_requests_to_user", handlers_friend.handleDeleteFriendRequestsToUser, true);
+
+    // Group routes
+    try gw.addRoute(.POST, "/group/create_group", handlers_group.handleCreateGroup, true);
+    try gw.addRoute(.POST, "/group/set_group_info", handlers_group.handleSetGroupInfo, true);
+    try gw.addRoute(.POST, "/group/get_groups_info", handlers_group.handleGetGroupsInfo, true);
+    try gw.addRoute(.POST, "/group/get_group_member_list", handlers_group.handleGetGroupMemberList, true);
+    try gw.addRoute(.POST, "/group/get_group_members_info", handlers_group.handleGetGroupMembersInfo, true);
+    try gw.addRoute(.POST, "/group/invite_user_to_group", handlers_group.handleInviteToGroup, true);
+    try gw.addRoute(.POST, "/group/kick_group", handlers_group.handleKickFromGroup, true);
+    try gw.addRoute(.POST, "/group/quit_group", handlers_group.handleQuitGroup, true);
+    try gw.addRoute(.POST, "/group/dismiss_group", handlers_group.handleDismissGroup, true);
+    try gw.addRoute(.POST, "/group/get_joined_group_list", handlers_group.handleGetJoinedGroupList, true);
+    try gw.addRoute(.POST, "/group/transfer_group", handlers_group.handleTransferGroup, true);
+    try gw.addRoute(.POST, "/group/set_group_member_info", handlers_group.handleSetGroupMemberInfo, true);
+    try gw.addRoute(.POST, "/group/mute_group_member", handlers_group.handleMuteGroupMember, true);
+    try gw.addRoute(.POST, "/group/cancel_mute_group_member", handlers_group.handleCancelMuteGroupMember, true);
+    try gw.addRoute(.POST, "/group/mute_group", handlers_group.handleMuteGroup, true);
+    try gw.addRoute(.POST, "/group/cancel_mute_group", handlers_group.handleCancelMuteGroup, true);
+    try gw.addRoute(.POST, "/group/join_group", handlers_group.handleJoinGroup, true);
+    try gw.addRoute(.POST, "/group/group_application_response", handlers_group.handleGroupApplicationResponse, true);
+    try gw.addRoute(.POST, "/group/get_recv_group_applicationList", handlers_group.handleGetRecvGroupApplications, true);
+    try gw.addRoute(.POST, "/group/get_user_req_group_applicationList", handlers_group.handleGetUserReqGroupApplications, true);
+    try gw.addRoute(.POST, "/group/get_group_users_req_application_list", handlers_group.handleGetGroupUsersReqApplicationList, true);
+    try gw.addRoute(.POST, "/group/get_specified_user_group_request_info", handlers_group.handleGetSpecifiedUserGroupRequestInfo, true);
+    try gw.addRoute(.POST, "/group/set_group_info_ex", handlers_group.handleSetGroupInfoEx, true);
+    try gw.addRoute(.POST, "/group/get_group_abstract_info", handlers_group.handleGetGroupAbstractInfo, true);
+    try gw.addRoute(.POST, "/group/get_groups", handlers_group.handleGetGroups, true);
+    try gw.addRoute(.POST, "/group/get_group_member_user_id", handlers_group.handleGetGroupMemberUserIDs, true);
+    try gw.addRoute(.POST, "/group/get_incremental_join_groups", handlers_group.handleGetIncrementalJoinGroups, true);
+    try gw.addRoute(.POST, "/group/get_incremental_group_members", handlers_group.handleGetIncrementalGroupMembers, true);
+    try gw.addRoute(.POST, "/group/get_incremental_group_members_batch", handlers_group.handleGetIncrementalGroupMembersBatch, true);
+    try gw.addRoute(.POST, "/group/get_full_group_member_user_ids", handlers_group.handleGetFullGroupMemberUserIDs, true);
+    try gw.addRoute(.POST, "/group/get_full_join_group_ids", handlers_group.handleGetFullJoinGroupIDs, true);
+    try gw.addRoute(.POST, "/group/get_group_application_unhandled_count", handlers_group.handleGetGroupApplicationUnheandledCount, true);
+    try gw.addRoute(.POST, "/group/delete_group_requests_from_user", handlers_group.handleDeleteGroupRequestsFromUser, true);
+    try gw.addRoute(.POST, "/group/delete_group_requests_to_group", handlers_group.handleDeleteGroupRequestsToGroup, true);
+
+    // Message routes
+    try gw.addRoute(.POST, "/msg/send_msg", handlers_message.handleSendMessage, true);
+    try gw.addRoute(.POST, "/msg/send_business_notification", handlers_message.handleSendBusinessNotification, true);
+    try gw.addRoute(.POST, "/msg/batch_send_msg", handlers_message.handleBatchSendMsg, true);
+    try gw.addRoute(.POST, "/msg/pull_msg_by_seq", handlers_message.handlePullMsgBySeqs, true);
+    try gw.addRoute(.POST, "/msg/revoke_msg", handlers_message.handleRevokeMsg, true);
+    try gw.addRoute(.POST, "/msg/modify_message", handlers_message.handleModifyMessage, true);
+    try gw.addRoute(.POST, "/msg/delete_msgs", handlers_message.handleDeleteMsgs, true);
+    try gw.addRoute(.POST, "/msg/mark_msgs_as_read", handlers_message.handleMarkMsgsAsRead, true);
+    try gw.addRoute(.POST, "/msg/mark_conversation_as_read", handlers_conversation.handleMarkConversationAsRead, true);
+    try gw.addRoute(.POST, "/msg/get_conversations_has_read_and_max_seq", handlers_conversation.handleGetConversationsHasReadAndMaxSeq, true);
+    try gw.addRoute(.POST, "/msg/set_conversation_has_read_seq", handlers_conversation.handleSetConversationHasReadSeq, true);
+    try gw.addRoute(.POST, "/msg/clear_conversation_msg", handlers_conversation.handleClearConversationMsg, true);
+    try gw.addRoute(.POST, "/msg/user_clear_all_msg", handlers_conversation.handleUserClearAllMsg, true);
+    try gw.addRoute(.POST, "/msg/delete_msg_phsical_by_seq", handlers_conversation.handleDeleteMsgPhysicalBySeq, true);
+    try gw.addRoute(.POST, "/msg/delete_msg_physical", handlers_conversation.handleDeleteMsgPhysical, true);
+    try gw.addRoute(.POST, "/msg/search_msg", handlers_message.handleSearchMsg, true);
+    try gw.addRoute(.POST, "/msg/newest_seq", handlers_message.handleGetSeq, true);
+    try gw.addRoute(.POST, "/msg/check_msg_is_send_success", handlers_message.handleCheckMsgIsSendSuccess, true);
+    try gw.addRoute(.POST, "/msg/get_server_time", handlers_message.handleGetServerTime, false);
+    try gw.addRoute(.POST, "/msg/mark_group_message_read", handlers_conversation.handleMarkGroupMessageRead, true);
+    try gw.addRoute(.POST, "/msg/get_group_message_read_num", handlers_conversation.handleGetGroupMessageReadNum, true);
+    try gw.addRoute(.POST, "/msg/get_group_message_has_read", handlers_conversation.handleGetGroupMessageHasRead, true);
+    try gw.addRoute(.POST, "/msg/mark_user_message_read", handlers_conversation.handleMarkUserMessageRead, true);
+    try gw.addRoute(.POST, "/msg/mark_conversation_read", handlers_conversation.handleMarkConversationRead, true);
+
+    // Conversation routes
+    try gw.addRoute(.POST, "/conversation/get_sorted_conversation_list", handlers_conversation.handleGetSortedConversationList, true);
+    try gw.addRoute(.POST, "/conversation/get_all_conversations", handlers_conversation.handleGetAllConversations, true);
+    try gw.addRoute(.POST, "/conversation/get_conversation", handlers_conversation.handleGetConversation, true);
+    try gw.addRoute(.POST, "/conversation/get_conversations", handlers_conversation.handleGetConversations, true);
+    try gw.addRoute(.POST, "/conversation/set_conversations", handlers_conversation.handleSetConversations, true);
+    try gw.addRoute(.POST, "/conversation/get_conversation_offline_push_user_ids", handlers_conversation.handleGetConversationOfflinePushUserIDs, true);
+    try gw.addRoute(.POST, "/conversation/get_full_conversation_ids", handlers_conversation.handleGetFullConversationIDs, true);
+    try gw.addRoute(.POST, "/conversation/get_incremental_conversations", handlers_conversation.handleGetIncrementalConversations, true);
+    try gw.addRoute(.POST, "/conversation/get_owner_conversation", handlers_conversation.handleGetOwnerConversation, true);
+    try gw.addRoute(.POST, "/conversation/get_not_notify_conversation_ids", handlers_conversation.handleGetNotNotifyConversationIDs, true);
+    try gw.addRoute(.POST, "/conversation/get_pinned_conversation_ids", handlers_conversation.handleGetPinnedConversationIDs, true);
+
+    // Encryption routes
+    try gw.addRoute(.POST, "/encryption/get_encryption_key", handlers_conversation.handleGetEncryptionKey, true);
+    try gw.addRoute(.POST, "/encryption/gen_encryption_key", handlers_conversation.handleGenEncryptionKey, true);
+
+    // Office routes (work moments)
+    try gw.addRoute(.POST, "/office/work_moment/add", handlers_office.handleCreateWorkMoment, true);
+    try gw.addRoute(.POST, "/office/work_moment/del", handlers_office.handleDeleteWorkMoment, true);
+    try gw.addRoute(.POST, "/office/work_moment/get", handlers_office.handleGetWorkMoment, true);
+    try gw.addRoute(.POST, "/office/work_moment/find/recv", handlers_office.handleGetRecvWorkMoments, true);
+    try gw.addRoute(.POST, "/office/work_moment/find/send", handlers_office.handleGetSendWorkMoments, true);
+    try gw.addRoute(.POST, "/office/work_moment/like", handlers_office.handleLikeWorkMoment, true);
+    try gw.addRoute(.POST, "/office/work_moment/comment/add", handlers_office.handleAddComment, true);
+    try gw.addRoute(.POST, "/office/work_moment/comment/del", handlers_office.handleDeleteComment, true);
+    try gw.addRoute(.POST, "/office/work_moment/logs", handlers_office.handleGetWorkMomentLogs, true);
+    try gw.addRoute(.POST, "/office/work_moment/unread/clear", handlers_office.handleClearUnreadWorkMoments, true);
+    try gw.addRoute(.POST, "/office/work_moment/unread/count", handlers_office.handleGetUnreadWorkMomentsCount, true);
+
+    // Tag routes
+    try gw.addRoute(.POST, "/office/tag/find/user", handlers_office.handleGetUserTags, true);
+    try gw.addRoute(.POST, "/office/tag/add", handlers_office.handleCreateTag, true);
+    try gw.addRoute(.POST, "/office/tag/del", handlers_office.handleDeleteTag, true);
+    try gw.addRoute(.POST, "/office/tag/set", handlers_office.handleUpdateTag, true);
+
+    // Collect / Favorite routes
+    try gw.addRoute(.POST, "/collect/add", handlers_office.handleAddFavoriteMessage, true);
+    try gw.addRoute(.POST, "/collect/del", handlers_office.handleRemoveFavoriteMessage, true);
+    try gw.addRoute(.POST, "/collect/list", handlers_office.handleGetFavoriteMessages, true);
+
+    // Client config routes
+    try gw.addRoute(.POST, "/client_config/get", handlers_office.handleGetClientConfig, true);
+
+    // Organization routes
+    try gw.addRoute(.POST, "/organization/info", handlers_organization.handleGetOrganization, true);
+    try gw.addRoute(.POST, "/organization/department/find", handlers_organization.handleGetDepartments, true);
+    try gw.addRoute(.POST, "/organization/user/department", handlers_organization.handleGetUsersInDepartments, true);
+    try gw.addRoute(.POST, "/organization/department/child", handlers_organization.handleGetSubDepartmentsAndMembers, true);
+    try gw.addRoute(.POST, "/user/search/organization/full", handlers_organization.handleSearchOrganizationUsers, true);
+
+    // Third-party service routes (stub - S3/MinIO integration TODO)
+    try gw.addRoute(.POST, "/third/fcm_update_token", handlers_third.handleFCMUpdateToken, true);
+    try gw.addRoute(.POST, "/third/set_app_badge", handlers_third.handleSetAppBadge, true);
+    try gw.addRoute(.POST, "/third/logs/upload", handlers_third.handleUploadLogs, true);
+    try gw.addRoute(.POST, "/third/logs/search", handlers_third.handleSearchLogs, true);
+    try gw.addRoute(.POST, "/object/part_limit", handlers_third.handleObjectPartLimit, true);
+    try gw.addRoute(.POST, "/object/auth_sign", handlers_third.handleObjectAuthSign, true);
+    try gw.addRoute(.POST, "/object/access_url", handlers_third.handleObjectAccessUrl, true);
+
+    // Statistics routes
+    try gw.addRoute(.POST, "/statistics/user/register", handlers_stats.handleStatisticsUserRegister, true);
+    try gw.addRoute(.POST, "/statistics/user/active", handlers_stats.handleStatisticsUserActive, true);
+    try gw.addRoute(.POST, "/statistics/group/create", handlers_stats.handleStatisticsGroupCreate, true);
+    try gw.addRoute(.POST, "/statistics/group/active", handlers_stats.handleStatisticsGroupActive, true);
+
+    // RTC meeting routes
+    try gw.addRoute(.POST, "/rtc-meeting/create", handlers_rtc.handleRTCMeetingCreate, true);
+    try gw.addRoute(.POST, "/rtc-meeting/join", handlers_rtc.handleRTCMeetingJoin, true);
+    try gw.addRoute(.POST, "/rtc-meeting/leave", handlers_rtc.handleRTCMeetingLeave, true);
+    try gw.addRoute(.POST, "/rtc-meeting/close", handlers_rtc.handleRTCMeetingClose, true);
+    try gw.addRoute(.POST, "/rtc-meeting/info", handlers_rtc.handleRTCMeetingInfo, true);
+    try gw.addRoute(.POST, "/rtc-meeting/list", handlers_rtc.handleRTCMeetingList, true);
+    try gw.addRoute(.POST, "/rtc-meeting/mute", handlers_rtc.handleRTCMeetingMute, true);
+    try gw.addRoute(.POST, "/rtc-meeting/unmute", handlers_rtc.handleRTCMeetingUnmute, true);
+    try gw.addRoute(.POST, "/rtc-meeting/video_on", handlers_rtc.handleRTCMeetingVideoOn, true);
+    try gw.addRoute(.POST, "/rtc-meeting/video_off", handlers_rtc.handleRTCMeetingVideoOff, true);
+    try gw.addRoute(.POST, "/rtc-meeting/kick", handlers_rtc.handleRTCMeetingKick, true);
+    try gw.addRoute(.POST, "/rtc-meeting/transfer_host", handlers_rtc.handleRTCMeetingTransferHost, true);
+    try gw.addRoute(.POST, "/rtc-meeting/set_layout", handlers_rtc.handleRTCMeetingSetLayout, true);
+    try gw.addRoute(.POST, "/rtc-meeting/record/start", handlers_rtc.handleRTCMeetingRecordStart, true);
+    try gw.addRoute(.POST, "/rtc-meeting/record/stop", handlers_rtc.handleRTCMeetingRecordStop, true);
+    try gw.addRoute(.POST, "/rtc-meeting/signal", handlers_rtc.handleRTCMeetingSignal, true);
+    try gw.addRoute(.POST, "/rtc-meeting/invite", handlers_rtc.handleRTCMeetingInvite, true);
+    try gw.addRoute(.POST, "/rtc-meeting/reject", handlers_rtc.handleRTCMeetingReject, true);
+    try gw.addRoute(.POST, "/rtc-meeting/accept", handlers_rtc.handleRTCMeetingAccept, true);
+
+    // Prometheus metrics endpoint
+    try gw.addRoute(.GET, "/metrics", handlers_stats.handlePrometheusMetrics, false);
+
+    std.log.info("GatewayModule initialized with {d} routes", .{gw.routes.items.len});
+}
+
+comptime {
+    core.validateModule(@This());
+}
+

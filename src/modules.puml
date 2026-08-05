@@ -1,0 +1,107 @@
+@startuml
+!theme plain
+
+component [push] {
+  Push notification worker - online filter, DND filter, FCM/APNs offline push queue
+}
+
+push --> queue
+push --> user
+push --> conversation
+component [group] {
+  Group chat - CRUD, member management, roles, applications
+}
+
+group --> user
+group --> db_postgres
+component [organization] {
+  Organization and department management
+}
+
+organization --> user
+organization --> db_postgres
+component [queue] {
+  PGMQ message queue wrapper
+}
+
+queue --> db_postgres
+component [conversation] {
+  Conversation management - CRUD, participants, seq tracking
+}
+
+conversation --> user
+conversation --> db_postgres
+component [websocket] {
+  WebSocket server for real-time IM communication
+}
+
+websocket --> config
+websocket --> auth
+websocket --> event_bus
+component [office] {
+  Work moments and social features
+}
+
+office --> user
+office --> db_postgres
+component [user] {
+  User management - registration, profile, online status
+}
+
+user --> config
+user --> db_postgres
+component [config] {
+  Configuration loading module
+}
+
+component [db_postgres] {
+  PostgreSQL database module using libpq
+}
+
+db_postgres --> config
+component [auth] {
+  JWT authentication - login, register, token management
+}
+
+auth --> user
+auth --> config
+auth --> db_postgres
+component [crontask] {
+  Background cron tasks: message cleanup, webhook delivery, stats refresh
+}
+
+crontask --> db_postgres
+crontask --> config
+crontask --> third
+component [event_bus] {
+  Event-driven communication module (backed by core infrastructure)
+}
+
+component [third] {
+  Third-party services: RustFS object storage, FCM tokens, logs
+}
+
+third --> config
+third --> db_postgres
+component [gateway] {
+  HTTP + WebSocket gateway for client communication
+}
+
+gateway --> config
+gateway --> auth
+gateway --> user
+component [message] {
+  Message storage - send, recall, delete, pagination, conversation auto-management
+}
+
+message --> conversation
+message --> group
+message --> db_postgres
+component [friend] {
+  Friend relationships - requests, accept/decline, blacklist
+}
+
+friend --> user
+friend --> db_postgres
+
+@enduml
