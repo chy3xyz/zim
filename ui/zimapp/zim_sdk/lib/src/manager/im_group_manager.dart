@@ -185,7 +185,7 @@ class GroupManager {
                 'ownerUserID': ownerUserID,
                 'operationID': Utils.checkOperationID(operationID),
               }))
-          .then((value) => Utils.toObj(value, (map) => GroupInfo.fromJson(map)));
+          .then((value) => value is GroupInfo ? value as GroupInfo : Utils.toObj<GroupInfo>(value, (map) => GroupInfo.fromJson(map)));
 
   /// Edit group information
   Future<dynamic> setGroupInfo(

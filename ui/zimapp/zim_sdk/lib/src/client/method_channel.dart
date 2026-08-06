@@ -127,7 +127,10 @@ class ZimSdkMethodChannel {
       case 'getLoginStatus':
         if (!_initialized) return LoginStatus.logout;
         if (_logined) return LoginStatus.logged;
-        return LoginStatus.logging;
+        // Not logged in yet — report logout, NOT logging: the login flow
+        // skips the real login call when status is logging/logged, which
+        // would leave the token unset (401 on subsequent authed requests).
+        return LoginStatus.logout;
 
       case 'uploadFile':
       case 'cancelUpload':

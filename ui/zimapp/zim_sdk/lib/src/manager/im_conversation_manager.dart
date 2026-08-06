@@ -59,7 +59,7 @@ class ConversationManager {
                 "sessionType": sessionType,
                 "operationID": Utils.checkOperationID(operationID),
               }))
-          .then((value) => Utils.toObj(value, (map) => ConversationInfo.fromJson(map)));
+          .then((value) => value is ConversationInfo ? value as ConversationInfo : Utils.toObj<ConversationInfo>(value, (map) => ConversationInfo.fromJson(map)));
 
   /// 根据会话id获取多个会话
   /// [conversationIDList] 会话id列表

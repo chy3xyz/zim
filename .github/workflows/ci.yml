@@ -100,3 +100,23 @@ jobs:
       - name: Test (zim_sdk protocol contract)
         working-directory: ui/zimapp/zim_sdk
         run: flutter test test/message_model_test.dart
+
+      - name: Build backend for e2e integration test
+        # The zim_sdk integration test talks to a real zim backend (HTTP+WS).
+        run: |
+          cd ../../../zig_ws/zigmodu && git -c advice.detachedHead=false checkout v0.15.12
+          cd /Users/runner/work/zim/zim/src && zig build
+          ./zig-out/bin/zim > /tmp/zim-e2e-ci.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:10000/health >/dev/null 2>&1 && break
+            sleep 1
+          done
+
+      - name: E2E integration test (flutter SDK ↔ zim backend)
+        working-directory: ui/zimapp/zim_sdk
+        run: flutter test test/backend_integration_test.dart
+        env:
+          ZIM_E2E: "1"
+
+      - name: Stop backend
+        run: kill %1 || true

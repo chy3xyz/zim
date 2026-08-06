@@ -219,6 +219,20 @@ Edit `config/config.yaml`:
 - **结果**：`dart analyze` 0 error / 24 warning（拆分前 0/21，抽象声明 lint 微增）、`flutter test` 4/4 全过、CI 前端门禁（analyze 0 error + flutter test）就绪
 - **教训**：dart 方法提取必须处理（多行签名 parens 跨行、字符串字面量花括号、`({` record 类型、`=>` 箭头函数、无返回类型方法）；删除按行号降序；每步 analyze 验证
 
+## Phase 74: Flutter ↔ zim 后端数据打通（zim_sdk 真实集成测试）
+
+- **集成测试**（`zim_sdk/test/backend_integration_test.dart`，flutter test，需后端运行）：注册→登录→加好友→SDK 发消息→会话自动同步→seq 拉取→未读→标记已读，**全链路真实 HTTP(:10000)/WS(:10001) 通过**
+- **修复 zim_sdk 真实 bug（6 个）**：
+  1. `getLoginStatus` 未登录返回 logging(2) → login 跳过实际登录（token 未设置 → 后续 401）→ 改返回 logout
+  2. `invokeMethod` 泛型推断在 `=>` 箭头链退化（`Future<dynamic>` vs `Future<Message>`）→ createTextMessage/sendMessage 改 async/await
+  3. `Utils.toObj` 泛型未指定 → 运行时类型错（4 个 manager 补显式 `<T>` + `is T ? value as T`）
+  4. `cleanMap` 修改调用方不可变 map → 复制后删除
+  5. `local_db` sqflite：嵌套 Map 参数（JSON 序列化 + camel/snake 列名映射（含 ID 缩写）+ PRAGMA table_info 列过滤）
+  6. `sendMessage` 参数 `userID` → `recvID`（method_channel 读 recvID，空值 → 后端 NotFriend）
+- **契约核对**：后端 SendMsgResp 无 sendID（Go 契约）；get_sorted_conversation_list 的 conversationElems 为平结构（conversationID/msgInfo 平铺）
+- **CI**：frontend job 新增"构建后端 + 启动 + E2E 集成测试"门禁
+- 测试：zim_sdk 5 个（4 契约 + 1 集成）全过，analyze 0 error
+
 ## 遗留项（Phase 35 之后）
 
 - **gateway handler 已按域拆分**（Phase 49）：`gateway/handlers.zig` 4125 行拆为 298 行骨架 + `handlers/{helpers,auth,account,user,friend,group,message,conversation,encryption,office,organization,third,statistics,rtc,jssdk,health}.zig` 16 个域文件；新增 handler 遵循同结构

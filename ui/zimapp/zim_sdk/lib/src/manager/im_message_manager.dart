@@ -39,19 +39,20 @@ class MessageManager {
     String? groupID,
     bool isOnlineOnly = false,
     String? operationID,
-  }) =>
-      _channel
-          .invokeMethod(
-              'sendMessage',
-              _buildParam({
-                'message': message.toJson(),
-                'offlinePushInfo': offlinePushInfo.toJson(),
-                'userID': userID ?? '',
-                'groupID': groupID ?? '',
-                'isOnlineOnly': isOnlineOnly,
-                'operationID': Utils.checkOperationID(operationID),
-              }))
-          .then((value) => Utils.toObj(value, (map) => Message.fromJson(map)));
+  }) async {
+    final value = await _channel.invokeMethod(
+        'sendMessage',
+        _buildParam({
+          'message': message.toJson(),
+          'offlinePushInfo': offlinePushInfo.toJson(),
+          'recvID': userID ?? '',
+          'groupID': groupID ?? '',
+          'isOnlineOnly': isOnlineOnly,
+          'operationID': Utils.checkOperationID(operationID),
+        }));
+    if (value is Message) return value;
+    return Utils.toObj<Message>(value as String, (map) => Message.fromJson(map));
+  }
 
   /// Delete a message from local storage
   /// [message] Message to be deleted
@@ -123,7 +124,7 @@ class MessageManager {
                 "senderID": senderID,
                 "operationID": Utils.checkOperationID(operationID),
               }))
-          .then((value) => Utils.toObj(value, (map) => Message.fromJson(map)));
+          .then((value) => value is Message ? value as Message : Utils.toObj<Message>(value, (map) => Message.fromJson(map)));
 
   /// Insert a group chat message into local storage
   /// [groupID] Group ID
@@ -144,21 +145,22 @@ class MessageManager {
                 "senderID": senderID,
                 "operationID": Utils.checkOperationID(operationID),
               }))
-          .then((value) => Utils.toObj(value, (map) => Message.fromJson(map)));
+          .then((value) => value is Message ? value as Message : Utils.toObj<Message>(value, (map) => Message.fromJson(map)));
 
   /// Create a text message
   Future<Message> createTextMessage({
     required String text,
     String? operationID,
-  }) =>
-      _channel
-          .invokeMethod(
-              'createTextMessage',
-              _buildParam({
-                'text': text,
-                "operationID": Utils.checkOperationID(operationID),
-              }))
-          .then((value) => Utils.toObj(value, (map) => Message.fromJson(map)));
+  }) async {
+    final value = await _channel.invokeMethod(
+        'createTextMessage',
+        _buildParam({
+          'text': text,
+          "operationID": Utils.checkOperationID(operationID),
+        }));
+    if (value is Message) return value;
+    return Utils.toObj<Message>(value as String, (map) => Message.fromJson(map));
+  }
 
   /// Create an @ message
   /// [text] Input content
@@ -183,7 +185,7 @@ class MessageManager {
               "operationID": Utils.checkOperationID(operationID),
             }),
           )
-          .then((value) => Utils.toObj(value, (map) => Message.fromJson(map)));
+          .then((value) => value is Message ? value as Message : Utils.toObj<Message>(value, (map) => Message.fromJson(map)));
 
   /// Create an image message
   /// [imagePath] Path
@@ -199,7 +201,7 @@ class MessageManager {
               "operationID": Utils.checkOperationID(operationID),
             }),
           )
-          .then((value) => Utils.toObj(value, (map) => Message.fromJson(map)));
+          .then((value) => value is Message ? value as Message : Utils.toObj<Message>(value, (map) => Message.fromJson(map)));
 
   /// Create an image message from a full path
   /// [imagePath] Path
@@ -215,7 +217,7 @@ class MessageManager {
               "operationID": Utils.checkOperationID(operationID),
             }),
           )
-          .then((value) => Utils.toObj(value, (map) => Message.fromJson(map)));
+          .then((value) => value is Message ? value as Message : Utils.toObj<Message>(value, (map) => Message.fromJson(map)));
 
   /// Create a sound message
   /// [soundPath] Path
@@ -234,7 +236,7 @@ class MessageManager {
               "operationID": Utils.checkOperationID(operationID),
             }),
           )
-          .then((value) => Utils.toObj(value, (map) => Message.fromJson(map)));
+          .then((value) => value is Message ? value as Message : Utils.toObj<Message>(value, (map) => Message.fromJson(map)));
 
   /// Create a sound message from a full path
   /// [soundPath] Path
@@ -253,7 +255,7 @@ class MessageManager {
               "operationID": Utils.checkOperationID(operationID),
             }),
           )
-          .then((value) => Utils.toObj(value, (map) => Message.fromJson(map)));
+          .then((value) => value is Message ? value as Message : Utils.toObj<Message>(value, (map) => Message.fromJson(map)));
 
   /// Create a video message
   /// [videoPath] Path
@@ -277,7 +279,7 @@ class MessageManager {
                 'snapshotPath': snapshotPath,
                 "operationID": Utils.checkOperationID(operationID),
               }))
-          .then((value) => Utils.toObj(value, (map) => Message.fromJson(map)));
+          .then((value) => value is Message ? value as Message : Utils.toObj<Message>(value, (map) => Message.fromJson(map)));
 
   /// Create a video message from a full path
   /// [videoPath] Path
@@ -301,7 +303,7 @@ class MessageManager {
                 'snapshotPath': snapshotPath,
                 "operationID": Utils.checkOperationID(operationID),
               }))
-          .then((value) => Utils.toObj(value, (map) => Message.fromJson(map)));
+          .then((value) => value is Message ? value as Message : Utils.toObj<Message>(value, (map) => Message.fromJson(map)));
 
   /// Create a file message
   /// [filePath] Path
@@ -319,7 +321,7 @@ class MessageManager {
               'fileName': fileName,
               "operationID": Utils.checkOperationID(operationID),
             }))
-        .then((value) => Utils.toObj(value, (map) => Message.fromJson(map)));
+        .then((value) => value is Message ? value as Message : Utils.toObj<Message>(value, (map) => Message.fromJson(map)));
   }
 
   /// Create a file message from a full path
@@ -338,7 +340,7 @@ class MessageManager {
                 'fileName': fileName,
                 "operationID": Utils.checkOperationID(operationID),
               }))
-          .then((value) => Utils.toObj(value, (map) => Message.fromJson(map)));
+          .then((value) => value is Message ? value as Message : Utils.toObj<Message>(value, (map) => Message.fromJson(map)));
 
   /// Create a merged message
   /// [messageList] Selected messages
@@ -359,7 +361,7 @@ class MessageManager {
                 'summaryList': summaryList,
                 "operationID": Utils.checkOperationID(operationID),
               }))
-          .then((value) => Utils.toObj(value, (map) => Message.fromJson(map)));
+          .then((value) => value is Message ? value as Message : Utils.toObj<Message>(value, (map) => Message.fromJson(map)));
 
   /// Create a forwarded message
   /// [message] Message to be forwarded
@@ -374,7 +376,7 @@ class MessageManager {
               'message': message.toJson(),
               "operationID": Utils.checkOperationID(operationID),
             }))
-        .then((value) => Utils.toObj(value, (map) => Message.fromJson(map)));
+        .then((value) => value is Message ? value as Message : Utils.toObj<Message>(value, (map) => Message.fromJson(map)));
   }
 
   /// Create a location message
@@ -396,7 +398,7 @@ class MessageManager {
                 'description': description,
                 "operationID": Utils.checkOperationID(operationID),
               }))
-          .then((value) => Utils.toObj(value, (map) => Message.fromJson(map)));
+          .then((value) => value is Message ? value as Message : Utils.toObj<Message>(value, (map) => Message.fromJson(map)));
 
   /// Create a custom message
   /// [data] Custom data
@@ -417,7 +419,7 @@ class MessageManager {
                 'description': description,
                 "operationID": Utils.checkOperationID(operationID),
               }))
-          .then((value) => Utils.toObj(value, (map) => Message.fromJson(map)));
+          .then((value) => value is Message ? value as Message : Utils.toObj<Message>(value, (map) => Message.fromJson(map)));
 
   /// Create a quoted message
   /// [text] Reply content
@@ -435,7 +437,7 @@ class MessageManager {
                 'quoteMessage': quoteMsg.toJson(),
                 "operationID": Utils.checkOperationID(operationID),
               }))
-          .then((value) => Utils.toObj(value, (map) => Message.fromJson(map)));
+          .then((value) => value is Message ? value as Message : Utils.toObj<Message>(value, (map) => Message.fromJson(map)));
 
   /// Create a card message
   /// [data] Custom data
@@ -458,7 +460,7 @@ class MessageManager {
                 },
                 "operationID": Utils.checkOperationID(operationID),
               }))
-          .then((value) => Utils.toObj(value, (map) => Message.fromJson(map)));
+          .then((value) => value is Message ? value as Message : Utils.toObj<Message>(value, (map) => Message.fromJson(map)));
 
   /// Create a custom emoji message
   /// [index] Positional emoji, matched based on index
@@ -476,7 +478,7 @@ class MessageManager {
                 'data': data,
                 "operationID": Utils.checkOperationID(operationID),
               }))
-          .then((value) => Utils.toObj(value, (map) => Message.fromJson(map)));
+          .then((value) => value is Message ? value as Message : Utils.toObj<Message>(value, (map) => Message.fromJson(map)));
 
   /// Search messages
   /// [conversationID] Query based on conversation, pass null for global search
@@ -644,7 +646,7 @@ class MessageManager {
               "operationID": Utils.checkOperationID(operationID),
             }),
           )
-          .then((value) => Utils.toObj(value, (map) => Message.fromJson(map)));
+          .then((value) => value is Message ? value as Message : Utils.toObj<Message>(value, (map) => Message.fromJson(map)));
 
   /// Rich text message with quote
   /// [text] Content for the reply
@@ -665,7 +667,7 @@ class MessageManager {
                 'richMessageInfoList': list.map((e) => e.toJson()).toList(),
                 "operationID": Utils.checkOperationID(operationID),
               }))
-          .then((value) => Utils.toObj(value, (map) => Message.fromJson(map)));
+          .then((value) => value is Message ? value as Message : Utils.toObj<Message>(value, (map) => Message.fromJson(map)));
 
   /// Send a message
   /// [message] Message body [createImageMessageByURL],[createSoundMessageByURL],[createVideoMessageByURL],[createFileMessageByURL]
@@ -691,7 +693,7 @@ class MessageManager {
                 'isOnlineOnly': isOnlineOnly,
                 'operationID': Utils.checkOperationID(operationID),
               }))
-          .then((value) => Utils.toObj(value, (map) => Message.fromJson(map)));
+          .then((value) => value is Message ? value as Message : Utils.toObj<Message>(value, (map) => Message.fromJson(map)));
 
   /// Create an image message by URL
   Future<Message> createImageMessageByURL({
@@ -712,7 +714,7 @@ class MessageManager {
               "operationID": Utils.checkOperationID(operationID),
             }),
           )
-          .then((value) => Utils.toObj(value, (map) => Message.fromJson(map)));
+          .then((value) => value is Message ? value as Message : Utils.toObj<Message>(value, (map) => Message.fromJson(map)));
 
   /// Create a sound message
   Future<Message> createSoundMessageByURL({
@@ -727,7 +729,7 @@ class MessageManager {
               "operationID": Utils.checkOperationID(operationID),
             }),
           )
-          .then((value) => Utils.toObj(value, (map) => Message.fromJson(map)));
+          .then((value) => value is Message ? value as Message : Utils.toObj<Message>(value, (map) => Message.fromJson(map)));
 
   /// Create a video message
   Future<Message> createVideoMessageByURL({
@@ -741,7 +743,7 @@ class MessageManager {
                 'videoElem': videoElem.toJson(),
                 "operationID": Utils.checkOperationID(operationID),
               }))
-          .then((value) => Utils.toObj(value, (map) => Message.fromJson(map)));
+          .then((value) => value is Message ? value as Message : Utils.toObj<Message>(value, (map) => Message.fromJson(map)));
 
   /// Create a file message
   Future<Message> createFileMessageByURL({
@@ -755,7 +757,7 @@ class MessageManager {
                 'fileElem': fileElem.toJson(),
                 "operationID": Utils.checkOperationID(operationID),
               }))
-          .then((value) => Utils.toObj(value, (map) => Message.fromJson(map)));
+          .then((value) => value is Message ? value as Message : Utils.toObj<Message>(value, (map) => Message.fromJson(map)));
 
   ///
   Future setCustomBusinessListener(OnCustomBusinessListener listener) {

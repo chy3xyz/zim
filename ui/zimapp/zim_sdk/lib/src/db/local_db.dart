@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
@@ -155,15 +156,73 @@ class ZimLocalDB {
     _db = null;
   }
 
+  // ─── Helpers: sqflite can't bind nested Map/List values — store them as
+  // JSON strings on insert and restore them on read. ───
+  static String _toSnake(String k) {
+    // clientMsgID -> client_msg_id (handle the ID/URL-style acronyms)
+    var s = k.replaceAllMapped(
+        RegExp(r'[A-Z][a-z]'), (m) => '_${m.group(0)!.toLowerCase()}');
+    s = s.replaceAllMapped(
+        RegExp(r'[A-Z]{2,}'), (m) => '_${m.group(0)!.toLowerCase()}');
+    return s;
+  }
+
+  static String _toCamel(String k) {
+    // client_msg_id -> clientMsgID
+    var s = k.replaceAllMapped(
+        RegExp(r'_([a-z])'), (m) => m.group(1)!.toUpperCase());
+    return s.replaceAll(RegExp(r'Id$'), 'ID');
+  }
+
+  Map<String, dynamic> _serialize(Map<String, dynamic> data) {
+    final out = <String, dynamic>{};
+    for (final e in data.entries) {
+      final v = e.value;
+      out[_toSnake(e.key)] = (v is Map || v is List) ? jsonEncode(v) : v;
+    }
+    return out;
+  }
+
+  final _columnCache = <String, Set<String>>{};
+
+  Future<Set<String>> _columns(String table) async {
+    if (_columnCache.containsKey(table)) return _columnCache[table]!;
+    final rows = await _db!.rawQuery('PRAGMA table_info($table)');
+    final cols = rows.map((r) => r['name'] as String).toSet();
+    _columnCache[table] = cols;
+    return cols;
+  }
+
+  Future<Map<String, dynamic>> _forInsert(String table, Map<String, dynamic> data) async {
+    final cols = await _columns(table);
+    return _serialize(data)
+      ..removeWhere((k, v) => !cols.contains(k));
+  }
+
+  Map<String, dynamic> _deserialize(Map<String, dynamic> row) {
+    final out = <String, dynamic>{};
+    for (final e in row.entries) {
+      final v = e.value;
+      if (v is String && (v.startsWith('{') || v.startsWith('['))) {
+        try {
+          out[_toCamel(e.key)] = jsonDecode(v);
+          continue;
+        } catch (_) {}
+      }
+      out[_toCamel(e.key)] = v;
+    }
+    return out;
+  }
+
   // ─── Conversations ───
   Future<void> insertConversation(Map<String, dynamic> data) async {
-    await db.insert('conversations', data, conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.insert('conversations', await _forInsert('conversations', data), conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<void> insertConversations(List<Map<String, dynamic>> list) async {
     final batch = db.batch();
     for (final data in list) {
-      batch.insert('conversations', data, conflictAlgorithm: ConflictAlgorithm.replace);
+      batch.insert('conversations', await _forInsert('conversations', data), conflictAlgorithm: ConflictAlgorithm.replace);
     }
     await batch.commit(noResult: true);
   }
@@ -187,13 +246,13 @@ class ZimLocalDB {
 
   // ─── Messages ───
   Future<void> insertMessage(Map<String, dynamic> data) async {
-    await db.insert('messages', data, conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.insert('messages', await _forInsert('messages', data), conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<void> insertMessages(List<Map<String, dynamic>> list) async {
     final batch = db.batch();
     for (final data in list) {
-      batch.insert('messages', data, conflictAlgorithm: ConflictAlgorithm.replace);
+      batch.insert('messages', await _forInsert('messages', data), conflictAlgorithm: ConflictAlgorithm.replace);
     }
     await batch.commit(noResult: true);
   }

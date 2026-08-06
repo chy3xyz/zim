@@ -32,14 +32,18 @@ class UserManager {
   /// Get information of the currently logged-in user
   Future<UserInfo> getSelfUserInfo({
     String? operationID,
-  }) =>
-      _channel
-          .invokeMethod(
-              'getSelfUserInfo',
-              _buildParam({
-                'operationID': Utils.checkOperationID(operationID),
-              }))
-          .then((value) => Utils.toObj(value, (map) => UserInfo.fromJson(map)));
+  }) async {
+    final resp = await _channel.invokeMethod(
+        'getSelfUserInfo',
+        _buildParam({
+          'operationID': Utils.checkOperationID(operationID),
+        }));
+    if (resp is UserInfo) return resp;
+    if (resp is String) {
+      return Utils.toObj<UserInfo>(resp, (map) => UserInfo.fromJson(map));
+    }
+    return UserInfo();
+  }
 
   /// Modify the profile of the currently logged-in user
   /// [nickname] Nickname
