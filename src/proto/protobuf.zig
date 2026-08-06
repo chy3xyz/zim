@@ -62,7 +62,7 @@ pub const Encoder = struct {
     }
 
     pub fn encodeTag(self: *Encoder, field_number: u32, wire_type: WireType) !void {
-        const key = (@as(u64, field_number) << 3) | @intFromEnum(wire_type);
+        const key = (@as(u64, field_number) << 3) | @backingInt(wire_type);
         try self.encodeVarint(key);
     }
 
@@ -185,7 +185,7 @@ pub const Decoder = struct {
         const key = try self.decodeVarint();
         const field_number = @as(u32, @intCast(key >> 3));
         const wire = @as(u3, @intCast(key & 0x07));
-        const wire_type: WireType = @enumFromInt(wire);
+        const wire_type: WireType = @fromBackingInt(@intCast(wire));
         return .{ .field_number = field_number, .wire_type = wire_type };
     }
 

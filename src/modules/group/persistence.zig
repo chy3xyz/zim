@@ -74,7 +74,7 @@ pub const GroupPersistence = struct {
             .{ .string = input.face_url },
             .{ .string = input.ex },
             .{ .string = input.creator_user_id },
-            .{ .smallint = @intFromEnum(input.group_type) },
+            .{ .smallint = @backingInt(input.group_type) },
             .{ .smallint = input.need_verification },
             .{ .bigint = now },
         };
@@ -99,7 +99,7 @@ pub const GroupPersistence = struct {
         const member_params = &[_]db_mod.QueryParam{
             .{ .string = group_id },
             .{ .string = input.creator_user_id },
-            .{ .smallint = @intFromEnum(model.MemberRole.owner) },
+            .{ .smallint = @backingInt(model.MemberRole.owner) },
             .{ .bigint = now },
             .{ .string = input.creator_user_id },
         };
@@ -110,7 +110,7 @@ pub const GroupPersistence = struct {
             const m_params = &[_]db_mod.QueryParam{
                 .{ .string = group_id },
                 .{ .string = uid },
-                .{ .smallint = @intFromEnum(model.MemberRole.member) },
+                .{ .smallint = @backingInt(model.MemberRole.member) },
                 .{ .bigint = now },
                 .{ .string = input.creator_user_id },
             };
@@ -129,9 +129,9 @@ pub const GroupPersistence = struct {
             .introduction = try self.allocator.dupe(u8, row[3]),
             .face_url = try self.allocator.dupe(u8, row[4]),
             .ex = try self.allocator.dupe(u8, row[5]),
-            .status = @enumFromInt(try std.fmt.parseInt(i16, row[6], 10)),
+            .status = @fromBackingInt(@intCast(try std.fmt.parseInt(i16, row[6], 10))),
             .creator_user_id = try self.allocator.dupe(u8, row[7]),
-            .group_type = @enumFromInt(try std.fmt.parseInt(i16, row[8], 10)),
+            .group_type = @fromBackingInt(@intCast(try std.fmt.parseInt(i16, row[8], 10))),
             .need_verification = try std.fmt.parseInt(i16, row[9], 10),
             .look_member_info = try std.fmt.parseInt(i16, row[10], 10),
             .apply_member_friend = try std.fmt.parseInt(i16, row[11], 10),
@@ -268,7 +268,7 @@ pub const GroupPersistence = struct {
         const params = &[_]db_mod.QueryParam{
             .{ .string = group_id },
             .{ .string = user_id },
-            .{ .smallint = @intFromEnum(model.MemberRole.member) },
+            .{ .smallint = @backingInt(model.MemberRole.member) },
             .{ .bigint = now },
             .{ .string = inviter },
         };
@@ -293,7 +293,7 @@ pub const GroupPersistence = struct {
             const params = &[_]db_mod.QueryParam{
                 .{ .string = group_id },
                 .{ .string = uid },
-                .{ .smallint = @intFromEnum(model.MemberRole.member) },
+                .{ .smallint = @backingInt(model.MemberRole.member) },
                 .{ .bigint = now },
                 .{ .string = inviter },
             };
@@ -316,7 +316,7 @@ pub const GroupPersistence = struct {
 
     pub fn setMemberRole(self: *GroupPersistence, group_id: []const u8, user_id: []const u8, role: model.MemberRole) !bool {
         const sql = "UPDATE group_members SET role_level = $1 WHERE group_id = $2 AND user_id = $3";
-        const params = &[_]db_mod.QueryParam{ .{ .smallint = @intFromEnum(role) }, .{ .string = group_id }, .{ .string = user_id } };
+        const params = &[_]db_mod.QueryParam{ .{ .smallint = @backingInt(role) }, .{ .string = group_id }, .{ .string = user_id } };
         _ = try self.db.execParams(sql, params);
         return true;
     }
@@ -327,12 +327,12 @@ pub const GroupPersistence = struct {
     pub fn transferOwnerTx(self: *GroupPersistence, tx: *db_mod.Tx, group_id: []const u8, old_owner: []const u8, new_owner: []const u8) !void {
         _ = self;
         _ = try tx.execParams("UPDATE group_members SET role_level = $1 WHERE group_id = $2 AND user_id = $3", &.{
-            .{ .smallint = @intFromEnum(model.MemberRole.member) },
+            .{ .smallint = @backingInt(model.MemberRole.member) },
             .{ .string = group_id },
             .{ .string = old_owner },
         });
         _ = try tx.execParams("UPDATE group_members SET role_level = $1 WHERE group_id = $2 AND user_id = $3", &.{
-            .{ .smallint = @intFromEnum(model.MemberRole.owner) },
+            .{ .smallint = @backingInt(model.MemberRole.owner) },
             .{ .string = group_id },
             .{ .string = new_owner },
         });

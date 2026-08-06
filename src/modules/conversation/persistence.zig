@@ -8,7 +8,7 @@ fn rowToConversation(allocator: std.mem.Allocator, row: []const []const u8) !mod
         .id = try allocator.dupe(u8, row[0]),
         .owner_user_id = try allocator.dupe(u8, row[1]),
         .conversation_id = try allocator.dupe(u8, row[2]),
-        .conversation_type = @enumFromInt(try std.fmt.parseInt(i16, row[3], 10)),
+        .conversation_type = @fromBackingInt(@intCast(try std.fmt.parseInt(i16, row[3], 10))),
         .user_id = try allocator.dupe(u8, row[4]),
         .group_id = try allocator.dupe(u8, row[5]),
         .recv_msg_opt = try std.fmt.parseInt(i16, row[6], 10),
@@ -156,7 +156,7 @@ pub const ConversationPersistence = struct {
     // ── Conversations ─────────────────────────────────────────────
 
     pub fn create(self: *ConversationPersistence, input: model.ConversationCreateInput) !model.Conversation {
-        const conv_type = @intFromEnum(input.conversation_type);
+        const conv_type = @backingInt(input.conversation_type);
         const pinned: i16 = if (false) 1 else 0;
         const private_chat: i16 = if (input.is_private_chat) 1 else 0;
 

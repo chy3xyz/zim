@@ -173,7 +173,7 @@ pub fn handleWSPullMsg(client: *WSClient, req_id: i32, msg_incr: []const u8, ope
             .group => 2,
             .notification => 3,
         };
-        const content_type: i32 = @intFromEnum(msg.content_type);
+        const content_type: i32 = @backingInt(msg.content_type);
         found_msg = sdkws.MsgData{
             .send_id = core.getAllocator().dupe(u8, msg.sender_id) catch "",
             .recv_id = core.getAllocator().dupe(u8, msg.receiver_id) catch "",
@@ -216,7 +216,7 @@ pub fn handleWSSendMsg(client: *WSClient, req_id: i32, msg_incr: []const u8, ope
     };
 
     const content_type: message_mod.ContentType = if (msg_data.content_type >= 101 and msg_data.content_type <= 117)
-        @enumFromInt(msg_data.content_type)
+        @fromBackingInt(@intCast(msg_data.content_type))
     else if (msg_data.content_type == 1000)
         .system_notification
     else
@@ -318,7 +318,7 @@ pub fn handleWSPullConvLastMessage(client: *WSClient, req_id: i32, msg_incr: []c
                     .sender_platform_id = 0,
                     .sender_nickname = "",
                     .sender_face_url = "",
-                    .session_type = @intCast(@intFromEnum(c.conversation_type)),
+                    .session_type = @intCast(@backingInt(c.conversation_type)),
                     .msg_from = 0,
                     .content_type = c.latest_msg_content_type,
                     .content = allocator.dupe(u8, c.latest_msg) catch "",

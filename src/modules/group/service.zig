@@ -81,7 +81,7 @@ pub const GroupService = struct {
         const result = try self.pers.setMemberRole(group_id, user_id, role);
         if (result) {
             const eb = event_bus_mod.getEventBus();
-            const payload = try std.fmt.allocPrint(core.getAllocator(), "{{\"group_id\":\"{s}\",\"user_id\":\"{s}\",\"role\":{}}}", .{ group_id, user_id, @intFromEnum(role) });
+            const payload = try std.fmt.allocPrint(core.getAllocator(), "{{\"group_id\":\"{s}\",\"user_id\":\"{s}\",\"role\":{}}}", .{ group_id, user_id, @backingInt(role) });
             defer core.getAllocator().free(payload);
             eb.emit(.group_member_role_changed, "group", payload);
         }
@@ -93,7 +93,7 @@ pub const GroupService = struct {
     pub fn transferOwner(self: *GroupService, group_id: []const u8, old_owner: []const u8, new_owner: []const u8) !void {
         if (std.mem.eql(u8, old_owner, new_owner)) return error.SameUser;
         const old = self.pers.getMember(group_id, old_owner) orelse return error.NotGroupMember;
-        if (old.role_level != @intFromEnum(model.MemberRole.owner)) return error.NotOwner;
+        if (old.role_level != @backingInt(model.MemberRole.owner)) return error.NotOwner;
         _ = self.pers.getMember(group_id, new_owner) orelse return error.NewOwnerNotMember;
 
         var tx = try self.pers.db.begin();
@@ -103,7 +103,7 @@ pub const GroupService = struct {
 
         // Role-change events fire after the commit.
         const eb = event_bus_mod.getEventBus();
-        inline for (.{ .{ old_owner, @intFromEnum(model.MemberRole.member) }, .{ new_owner, @intFromEnum(model.MemberRole.owner) } }) |pair| {
+        inline for (.{ .{ old_owner, @backingInt(model.MemberRole.member) }, .{ new_owner, @backingInt(model.MemberRole.owner) } }) |pair| {
             const payload = try std.fmt.allocPrint(core.getAllocator(), "{{\"group_id\":\"{s}\",\"user_id\":\"{s}\",\"role\":{d}}}", .{ group_id, pair[0], pair[1] });
             eb.emit(.group_member_role_changed, "group", payload);
             core.getAllocator().free(payload);

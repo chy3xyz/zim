@@ -474,7 +474,7 @@ pub fn handleGetSelfUnhandledApplyCount(ctx: *http.Context, _: *GatewayRoutes.St
     };
     var count: usize = 0;
     for (requests) |r| {
-        if (@intFromEnum(r.handle_result) == 0) count += 1;
+        if (@backingInt(r.handle_result) == 0) count += 1;
     }
     return sendOk(ctx, .{ .count = count });
 }

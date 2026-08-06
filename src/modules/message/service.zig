@@ -49,7 +49,7 @@ fn validateMessage(input: model.MessageSendInput) !void {
     // When attention_ids is set, filtering only applies to messages whose
     // sender or receiver is on the attention list; everyone else passes.
     const wc = @import("../config.zig").getConfig().webhook;
-    const ct = @intFromEnum(input.content_type);
+    const ct = @backingInt(input.content_type);
     const in_attention = wc.attention_ids.len == 0 or
         listContains(wc.attention_ids, input.send_id) or
         listContains(wc.attention_ids, input.recv_id);
@@ -148,8 +148,8 @@ pub const MessageService = struct {
             msg.receiver_id,
             msg.group_id,
             msg.seq,
-            @intFromEnum(msg.content_type),
-            @intFromEnum(msg.session_type),
+            @backingInt(msg.content_type),
+            @backingInt(msg.session_type),
             msg.content,
             msg.server_msg_id,
             msg.client_msg_id,
@@ -338,12 +338,12 @@ fn syncConversationTx(tx: *db_mod.Tx, msg: model.Message, at_all: bool, at_users
         msg.content,
         msg.seq,
         msg.send_time,
-        @intFromEnum(msg.content_type),
+        @backingInt(msg.content_type),
     });
     defer allocator.free(latest_msg_json);
 
     const conv_pers = conversation_mod.getStorage();
-    const ct = @intFromEnum(msg.content_type);
+    const ct = @backingInt(msg.content_type);
     switch (msg.session_type) {
         .single => {
             const user_ids = [_][]const u8{ msg.sender_id, msg.receiver_id };

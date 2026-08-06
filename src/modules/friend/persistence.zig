@@ -61,7 +61,7 @@ pub const FriendPersistence = struct {
         return model.FriendRequest{
             .from_user_id = try self.allocator.dupe(u8, row[0]),
             .to_user_id = try self.allocator.dupe(u8, row[1]),
-            .handle_result = @enumFromInt(try std.fmt.parseInt(i16, row[2], 10)),
+            .handle_result = @fromBackingInt(@intCast(try std.fmt.parseInt(i16, row[2], 10))),
             .req_msg = try self.allocator.dupe(u8, row[3]),
             .create_time = try std.fmt.parseInt(i64, row[4], 10),
             .handler_user_id = try self.allocator.dupe(u8, row[5]),
@@ -197,7 +197,7 @@ pub const FriendPersistence = struct {
                 .to_user_id = try allocator.dupe(u8, row[3]),
                 .to_nickname = try allocator.dupe(u8, row[4]),
                 .to_face_url = try allocator.dupe(u8, row[5]),
-                .handle_result = @enumFromInt(try std.fmt.parseInt(i16, row[6], 10)),
+                .handle_result = @fromBackingInt(@intCast(try std.fmt.parseInt(i16, row[6], 10))),
                 .req_msg = try allocator.dupe(u8, row[7]),
                 .create_time = try std.fmt.parseInt(i64, row[8], 10),
                 .handler_user_id = try allocator.dupe(u8, row[9]),

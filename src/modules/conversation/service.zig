@@ -18,7 +18,7 @@ pub const ConversationService = struct {
         const conv = try self.pers.create(input);
 
         const eb = event_bus_mod.getEventBus();
-        const payload = try std.fmt.allocPrint(core.getAllocator(), "{{\"conversation_id\":\"{s}\",\"owner\":\"{s}\",\"type\":{}}}", .{ conv.conversation_id, conv.owner_user_id, @intFromEnum(conv.conversation_type) });
+        const payload = try std.fmt.allocPrint(core.getAllocator(), "{{\"conversation_id\":\"{s}\",\"owner\":\"{s}\",\"type\":{}}}", .{ conv.conversation_id, conv.owner_user_id, @backingInt(conv.conversation_type) });
         defer core.getAllocator().free(payload);
         eb.emit(.conversation_created, "conversation", payload);
 

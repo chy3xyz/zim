@@ -49,7 +49,7 @@ pub fn handleGetConversation(ctx: *http.Context, _: *GatewayRoutes.State) anyerr
     const c = conv.?;
     return sendOk(ctx, .{
         .conversationID = c.conversation_id,
-        .conversationType = @intFromEnum(c.conversation_type),
+        .conversationType = @backingInt(c.conversation_type),
         .userID = c.user_id,
         .groupID = c.group_id,
         .recvMsgOpt = c.recv_msg_opt,
@@ -107,7 +107,7 @@ pub fn handleGetConversations(ctx: *http.Context, _: *GatewayRoutes.State) anyer
         if (conversation_mod.getConversation(req.ownerUserID, cid) catch null) |c| {
             try convs.append(core.getAllocator(), .{
                 .conversationID = c.conversation_id,
-                .conversationType = @intFromEnum(c.conversation_type),
+                .conversationType = @backingInt(c.conversation_type),
                 .userID = c.user_id,
                 .groupID = c.group_id,
                 .recvMsgOpt = c.recv_msg_opt,
@@ -199,7 +199,7 @@ pub fn handleGetOwnerConversation(ctx: *http.Context, _: *GatewayRoutes.State) a
     const c = conv.?;
     return sendOk(ctx, .{
         .conversationID = c.conversation_id,
-        .conversationType = @intFromEnum(c.conversation_type),
+        .conversationType = @backingInt(c.conversation_type),
         .userID = c.user_id,
         .groupID = c.group_id,
         .recvMsgOpt = c.recv_msg_opt,
@@ -360,7 +360,7 @@ pub fn handleGetSortedConversationList(ctx: *http.Context, _: *GatewayRoutes.Sta
             if (group_mod.getGroup(c.group_id)) |g| {
                 info.groupName = g.group_name;
                 info.groupFaceURL = g.face_url;
-                info.groupType = @intFromEnum(g.group_type);
+                info.groupType = @backingInt(g.group_type);
                 if (group_mod.getGroupMembers(c.group_id)) |members| {
                     info.groupMemberCount = @intCast(members.len);
                 } else |_| {}

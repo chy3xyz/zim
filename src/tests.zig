@@ -1115,8 +1115,8 @@ test "group: ownership transfer is validated and atomic" {
     var b_is_owner = false;
     var a_is_member = false;
     for (new_owner) |m| {
-        if (std.mem.eql(u8, m.user_id, b)) b_is_owner = m.role_level == @intFromEnum(group_mod.MemberRole.owner);
-        if (std.mem.eql(u8, m.user_id, a)) a_is_member = m.role_level == @intFromEnum(group_mod.MemberRole.member);
+        if (std.mem.eql(u8, m.user_id, b)) b_is_owner = m.role_level == @backingInt(group_mod.MemberRole.owner);
+        if (std.mem.eql(u8, m.user_id, a)) a_is_member = m.role_level == @backingInt(group_mod.MemberRole.member);
     }
     try std.testing.expect(b_is_owner);
     try std.testing.expect(a_is_member);
