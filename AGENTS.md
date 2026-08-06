@@ -322,7 +322,7 @@ cd src && zig build run
 
 ## Framework
 
-[zigmodu](https://github.com/chy3xyz/zigmodu) v0.15.11 (local source `~/w4_proj/zig_ws/zigmodu`, HEAD 6eb2afe = 远程同步；v0.15.11 含 @backingInt API 迁移（zig 0.17-dev.1567）、Time.zig Windows clock、sqlx/HttpMetrics 增强、release 幂等脚本；Zig toolchain 0.17.0-dev.1567，zig fmt 规则已重格式化) provides:
+[zigmodu](https://github.com/chy3xyz/zigmodu) v0.15.12 (local source `~/w4_proj/zig_ws/zigmodu`, HEAD 70eefaf = 远程同步；v0.15.12 含 RateLimiterRegistry 导出、audit b18 伪事务守卫、AI 原子 metrics；Zig toolchain 0.17.0-dev.1567) provides:
 - Module system with lifecycle (init/deinit)
 - Dependency validation at startup
 - Event bus (`TypedEventBus`, `ThreadSafeEventBus`) for decoupled communication
