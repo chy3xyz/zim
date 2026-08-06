@@ -123,6 +123,7 @@ fn freeParams(allocator: std.mem.Allocator, p: *const BuiltParams) void {
 fn queryParamsOn(allocator: std.mem.Allocator, conn: *c.PGconn, sql: []const u8, params: []const model.QueryParam) !model.QueryResult {
     var bp = try buildParams(allocator, sql, params);
     defer freeParams(allocator, &bp);
+    const start_ms = zigmodu.time.monotonicNowMilliseconds();
 
     const result = c.PQexecParams(conn, bp.sql_z.ptr, @intCast(params.len), null, bp.values.ptr, bp.lengths.ptr, bp.formats.ptr, 0);
     if (result == null) return error.QueryFailed;
@@ -165,6 +166,12 @@ fn queryParamsOn(allocator: std.mem.Allocator, conn: *c.PGconn, sql: []const u8,
     }
     const owned_rows = try rows.toOwnedSlice(allocator);
     c.PQclear(result);
+    const elapsed_ms = zigmodu.time.monotonicNowMilliseconds() - start_ms;
+    // Slow-query log (>=200ms) for perf triage.
+    core.metricDbDuration(@as(f64, @floatFromInt(elapsed_ms)) / 1000.0);
+    if (elapsed_ms >= 200) {
+        core.logJson(.{ .event = "db_slow_query", .module = "db_postgres", .duration_ms = elapsed_ms });
+    }
     return model.QueryResult{ .rows = owned_rows, .row_count = row_count, .affected_rows = affected };
 }
 
@@ -336,6 +343,7 @@ pub const PostgresClient = struct {
         // PQexec needs a NUL-terminated C string; allocPrint'd SQL is not.
         const sql_z = try dupZ(self.allocator, sql);
         defer self.allocator.free(sql_z);
+        const start_ms = zigmodu.time.monotonicNowMilliseconds();
         const result = c.PQexec(conn, sql_z.ptr);
         if (result == null) {
             return error.QueryFailed;
@@ -381,6 +389,11 @@ pub const PostgresClient = struct {
         const owned_rows = try rows.toOwnedSlice(self.allocator);
         c.PQclear(result);
         recordResult(self.runtime, true);
+        const elapsed_ms = zigmodu.time.monotonicNowMilliseconds() - start_ms;
+        core.metricDbDuration(@as(f64, @floatFromInt(elapsed_ms)) / 1000.0);
+        if (elapsed_ms >= 200) {
+            core.logJson(.{ .event = "db_slow_query", .module = "db_postgres", .duration_ms = elapsed_ms });
+        }
 
         return model.QueryResult{
             .rows = owned_rows,
@@ -405,6 +418,7 @@ pub const PostgresClient = struct {
         const conn = try self.ensureHealthy(pool_idx);
         const sql_z = try dupZ(self.allocator, sql);
         defer self.allocator.free(sql_z);
+        const start_ms = zigmodu.time.monotonicNowMilliseconds();
         const result = c.PQexec(conn, sql_z.ptr);
         if (result == null) {
             return error.ExecFailed;
@@ -425,6 +439,11 @@ pub const PostgresClient = struct {
         }
         c.PQclear(result);
         recordResult(self.runtime, true);
+        const elapsed_ms = zigmodu.time.monotonicNowMilliseconds() - start_ms;
+        core.metricDbDuration(@as(f64, @floatFromInt(elapsed_ms)) / 1000.0);
+        if (elapsed_ms >= 200) {
+            core.logJson(.{ .event = "db_slow_exec", .module = "db_postgres", .duration_ms = elapsed_ms });
+        }
         return affected;
     }
 

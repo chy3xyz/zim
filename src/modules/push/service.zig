@@ -39,6 +39,7 @@ pub const PushService = struct {
             .provider = @tagName(msg.provider),
         }, .{});
         _ = try self.pers.sendToQueue("push_notification", json);
+        core.metricPushSent();
     }
 
     pub fn queueOfflinePush(self: *PushService, user_ids: []const []const u8, title: []const u8, body: []const u8, payload: []const u8) !void {

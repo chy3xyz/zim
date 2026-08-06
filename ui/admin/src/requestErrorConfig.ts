@@ -54,7 +54,7 @@ export const errorConfig: RequestConfig = {
 
       const tokenErrCode = [1501, 1502, 1503, 1504, 1505, 1506, 1507];
 
-      if (data?.errDlt.includes('token')) {
+      if (data?.errDlt?.includes('token')) {
         localStorage.removeItem('IMAccountToken');
         localStorage.removeItem('IMAdminToken');
         history.push('/login');

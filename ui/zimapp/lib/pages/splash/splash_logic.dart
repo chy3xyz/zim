@@ -7,6 +7,8 @@ import 'package:openim_common/openim_common.dart';
 
 import '../../core/controller/im_controller.dart';
 import '../../routes/app_navigator.dart';
+import '../mine/server_config/server_config_binding.dart';
+import '../mine/server_config/server_config_view.dart';
 
 class SplashLogic extends GetxController {
   final imLogic = Get.find<IMController>();
@@ -16,10 +18,24 @@ class SplashLogic extends GetxController {
 
   String? get token => DataSp.imToken;
 
+  void _firstLaunchServerConfig() {
+    Get.to(
+      () => ServerConfigPage(),
+      binding: ServerConfigBinding(),
+    );
+  }
+
   late StreamSubscription initializedSub;
 
   @override
   void onInit() {
+    // First launch (no server config saved): guide to server setup before
+    // initializing the SDK so the app targets the right backend.
+    final savedServer = DataSp.getServerConfig();
+    if (savedServer == null || (savedServer['serverIP'] ?? '').isEmpty) {
+      _firstLaunchServerConfig();
+      return;
+    }
     initializedSub = imLogic.initializedSubject.listen((value) {
       Logger.print('---------------------initialized---------------------');
       if (null != userID && null != token) {

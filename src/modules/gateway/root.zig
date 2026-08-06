@@ -86,6 +86,33 @@ pub fn healthJson(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 pub fn deinit() void {
+    // Release RTC in-memory rooms (map + owned strings).
+    if (rtc_meetings) |*m| {
+        var it = m.iterator();
+        while (it.next()) |e| {
+            // `e.value_ptr.room_id` aliases the map key (same pointer) — freed
+            // via the key; freeing both would double-free.
+            core.getGlobalAllocator().free(e.key_ptr.*);
+            core.getGlobalAllocator().free(e.value_ptr.host_user_id);
+            core.getGlobalAllocator().free(e.value_ptr.meeting_name);
+        }
+        m.deinit();
+        rtc_meetings = null;
+    }
+    if (rtc_participants) |*p| {
+        var it = p.iterator();
+        while (it.next()) |e| {
+            // NOTE: `e.key_ptr.*` aliases the meetings map key (same room_id
+            // pointer) — freed there; do NOT free it again here.
+            for (e.value_ptr.items) |pt| {
+                core.getGlobalAllocator().free(pt.user_id);
+                core.getGlobalAllocator().free(pt.nickname);
+            }
+            e.value_ptr.deinit(core.getGlobalAllocator());
+        }
+        p.deinit();
+        rtc_participants = null;
+    }
     if (g_health) |*h| h.deinit();
     g_health = null;
     std.log.info("GatewayModule deinitialized", .{});

@@ -78,7 +78,11 @@ pub fn corsMiddleware(ctx: *http.Context, next: http.HandlerFn, _: ?*anyopaque) 
     core.metricHttpRequest();
     try ctx.setHeader("Access-Control-Allow-Origin", "*");
     try ctx.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-    try ctx.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, token");
+    // Echo the preflight-requested headers so any SDK custom header (e.g.
+    // OpenIM's `operationid`) passes CORS without per-header whitelisting.
+    const allow_headers = ctx.header("access-control-request-headers") orelse
+        "Content-Type, Authorization, token, operationid";
+    try ctx.setHeader("Access-Control-Allow-Headers", allow_headers);
     try ctx.setHeader("Access-Control-Max-Age", "86400");
     if (ctx.method == .OPTIONS) {
         ctx.status_code = 204;

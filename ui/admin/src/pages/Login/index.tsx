@@ -19,13 +19,16 @@ const Login = () => {
   const onFinish = async (value: FormField) => {
     setLoading(true);
     try {
-      const { data } = await adminLogin({ account: value.account, password: md5(value.password) });
+      // ZIM backend verifies plaintext (PBKDF2), unlike Go chat's MD5 store.
+      const { data } = await adminLogin({ account: value.account, password: value.password });
 
-      localStorage.setItem('level', String(data.level));
-      localStorage.setItem('IMAccountToken', data.adminToken);
+      // ZIM (IM) login response: { imToken, chatToken, userID } — map to the
+      // admin storage keys (no adminToken/imUserID/level in the IM envelope).
+      localStorage.setItem('level', String(data.level ?? 0));
+      localStorage.setItem('IMAccountToken', data.imToken);
       localStorage.setItem('IMAdminToken', data.imToken);
       localStorage.setItem('IMAdminAccount', value.account);
-      localStorage.setItem('IMAdminUserID', data.imUserID);
+      localStorage.setItem('IMAdminUserID', data.userID ?? value.account);
 
       await setInitialState((s: any) => ({
         ...s,

@@ -376,6 +376,10 @@ var g_metric_http_reqs: ?*PrometheusMetrics.Counter = null;
 var g_metric_ws_conns: ?*PrometheusMetrics.Gauge = null;
 var g_metric_msgs_sent: ?*PrometheusMetrics.Counter = null;
 var g_metric_http_duration: ?*PrometheusMetrics.Histogram = null;
+var g_metric_push_sent: ?*PrometheusMetrics.Counter = null;
+var g_metric_push_failed: ?*PrometheusMetrics.Counter = null;
+var g_metric_queue_depth: ?*PrometheusMetrics.Gauge = null;
+var g_metric_db_duration: ?*PrometheusMetrics.Histogram = null;
 
 pub fn initMetrics() void {
     if (g_metrics != null) return;
@@ -384,7 +388,27 @@ pub fn initMetrics() void {
     g_metric_ws_conns = metrics.createGauge("zim_ws_connections", "Currently connected WebSocket clients") catch null;
     g_metric_msgs_sent = metrics.createCounter("zim_messages_sent_total", "Messages sent via the gateway") catch null;
     g_metric_http_duration = metrics.createHistogram("zim_http_request_duration_seconds", "HTTP request duration in seconds", &.{ 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5 }) catch null;
+    g_metric_push_sent = metrics.createCounter("zim_push_sent_total", "Push notifications sent (online+offline)") catch null;
+    g_metric_push_failed = metrics.createCounter("zim_push_failed_total", "Push notification failures") catch null;
+    g_metric_queue_depth = metrics.createGauge("zim_queue_depth", "Pending messages in PGMQ queues") catch null;
+    g_metric_db_duration = metrics.createHistogram("zim_db_query_duration_seconds", "PostgreSQL query duration in seconds", &.{ 0.001, 0.01, 0.05, 0.1, 0.5, 1 }) catch null;
     g_metrics = metrics;
+}
+
+pub fn metricPushSent() void {
+    if (g_metric_push_sent) |c| c.inc();
+}
+
+pub fn metricPushFailed() void {
+    if (g_metric_push_failed) |c| c.inc();
+}
+
+pub fn metricQueueDepth(depth: i64) void {
+    if (g_metric_queue_depth) |g| g.set(depth);
+}
+
+pub fn metricDbDuration(seconds: f64) void {
+    if (g_metric_db_duration) |h| h.observe(seconds);
 }
 
 pub fn metricHttpRequest() void {
@@ -413,6 +437,10 @@ pub fn deinitMetrics() void {
     g_metric_ws_conns = null;
     g_metric_msgs_sent = null;
     g_metric_http_duration = null;
+    g_metric_push_sent = null;
+    g_metric_push_failed = null;
+    g_metric_queue_depth = null;
+    g_metric_db_duration = null;
     if (g_metrics) |*m| m.deinit();
     g_metrics = null;
 }

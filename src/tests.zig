@@ -537,6 +537,9 @@ const IntegrationCtx = struct {
         const event_bus_mod = @import("modules/event_bus.zig");
         const queue_mod = @import("modules/queue.zig");
         const push_mod = @import("modules/push.zig");
+        const office_mod = @import("modules/office.zig");
+        const organization_mod = @import("modules/organization.zig");
+        const third_mod = @import("modules/third.zig");
 
         config_mod.init() catch return null;
         db_mod.init() catch {
@@ -553,6 +556,9 @@ const IntegrationCtx = struct {
         message_mod.init() catch return null;
         queue_mod.init() catch return null;
         push_mod.init() catch return null;
+        office_mod.init() catch return null;
+        organization_mod.init() catch return null;
+        third_mod.init() catch return null;
 
         // One async subscriber makes the bus own + free event payload copies
         // (dispatchAsync is the last consumer; without it, emit() copies leak).
@@ -582,7 +588,13 @@ const IntegrationCtx = struct {
         const event_bus_mod = @import("modules/event_bus.zig");
         const queue_mod = @import("modules/queue.zig");
         const push_mod = @import("modules/push.zig");
+        const office_mod = @import("modules/office.zig");
+        const organization_mod = @import("modules/organization.zig");
+        const third_mod = @import("modules/third.zig");
         message_mod.deinit();
+        third_mod.deinit();
+        organization_mod.deinit();
+        office_mod.deinit();
         push_mod.deinit();
         queue_mod.deinit();
         group_mod.deinit();
@@ -593,6 +605,8 @@ const IntegrationCtx = struct {
         event_bus_mod.deinit();
         db_mod.deinit();
         config_mod.deinit();
+        const gw_root = @import("modules/gateway/root.zig");
+        gw_root.deinit(); // release RTC in-memory rooms (global allocator)
         self.arena_ptr.deinit();
         std.testing.allocator.destroy(self.arena_ptr);
         core.deinit();
@@ -1351,4 +1365,106 @@ test "config: reload is safe" {
     const cfg = config_mod.getConfig();
     try std.testing.expect(cfg.database.name.len > 0);
     try std.testing.expect(cfg.webhook.allowed_types.len == 0);
+}
+
+// ============================================================
+// Cross-domain handler contract: statistics/office/rtc/
+// organization/third endpoints respond with the OpenIM envelope
+// ============================================================
+test "handler contract: statistics/office/rtc/organization/third" {
+    const allocator = std.testing.allocator;
+    var ctx = IntegrationCtx.init(allocator) orelse return;
+    defer ctx.deinit();
+
+    const auth_mod = @import("modules/auth.zig");
+    const a = try ctx.register("xc_a");
+    const tok = try auth_mod.loginWithPassword(a, "test1234", 1);
+
+    var kit_arena = std.heap.ArenaAllocator.init(allocator);
+    defer kit_arena.deinit();
+    var holder = try buildTestServer(kit_arena.allocator());
+    defer {
+        holder.catalog.deinit();
+        holder.server.deinit();
+    }
+
+    const mk = struct {
+        fn hdr(t: []const u8) zigmodu.http.Testkit.HeaderPair {
+            return .{ "token", t };
+        }
+    }.hdr;
+
+    // /statistics/user/register — register counts
+    var st = try zigmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/statistics/user/register", .{
+        .body = "{}",
+        .headers = &.{mk(tok.token)},
+    });
+    defer st.deinit(kit_arena.allocator());
+    try std.testing.expect(std.mem.indexOf(u8, st.body, "\"errCode\":0") != null);
+    try std.testing.expect(std.mem.indexOf(u8, st.body, "\"total\"") != null);
+
+    // /office/work_moment/add — publish a work moment
+    const wm_body = try std.fmt.allocPrint(ctx.arena_ptr.allocator(), "{{\"userID\":\"{s}\",\"content\":\"hello moment\"}}", .{a});
+    var wm = try zigmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/office/work_moment/add", .{
+        .body = wm_body,
+        .headers = &.{mk(tok.token)},
+    });
+    defer wm.deinit(kit_arena.allocator());
+    try std.testing.expect(std.mem.indexOf(u8, wm.body, "\"errCode\":0") != null);
+
+    // /rtc-meeting/create — in-memory meeting room
+    const rtc_body = try std.fmt.allocPrint(ctx.arena_ptr.allocator(), "{{\"hostUserID\":\"{s}\",\"meetingName\":\"x chat\"}}", .{a});
+    var rtc = try zigmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/rtc-meeting/create", .{
+        .body = rtc_body,
+        .headers = &.{mk(tok.token)},
+    });
+    defer rtc.deinit(kit_arena.allocator());
+    try std.testing.expect(std.mem.indexOf(u8, rtc.body, "\"errCode\":0") != null);
+    try std.testing.expect(std.mem.indexOf(u8, rtc.body, "\"roomID\"") != null);
+
+    // /organization/info — org tree
+    var org = try zigmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/organization/info", .{
+        .body = "{}",
+        .headers = &.{mk(tok.token)},
+    });
+    defer org.deinit(kit_arena.allocator());
+    try std.testing.expect(std.mem.indexOf(u8, org.body, "\"errCode\":0") != null);
+
+    // /third/fcm_update_token — FCM token persistence (needs storage+db init)
+    const cfg = @import("modules/config.zig").getConfig();
+    const db_client = @import("modules/db_postgres.zig").getClient();
+    const third_cfg = @import("modules/third/model.zig").ObjectStorageConfig{
+        .endpoint = cfg.object_storage.endpoint,
+        .access_key = cfg.object_storage.access_key,
+        .secret_key = cfg.object_storage.secret_key,
+        .bucket = cfg.object_storage.bucket,
+        .region = cfg.object_storage.region,
+        .use_ssl = cfg.object_storage.use_ssl,
+    };
+    @import("modules/third.zig").initStorage(third_cfg, db_client, allocator);
+    const fcm_body = try std.fmt.allocPrint(ctx.arena_ptr.allocator(), "{{\"userID\":\"{s}\",\"fcmToken\":\"fcm-xc-1\",\"platformID\":2}}", .{a});
+    var fcm = try zigmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/third/fcm_update_token", .{
+        .body = fcm_body,
+        .headers = &.{mk(tok.token)},
+    });
+    defer fcm.deinit(kit_arena.allocator());
+    try std.testing.expect(std.mem.indexOf(u8, fcm.body, "\"errCode\":0") != null);
+}
+
+// ============================================================
+// WS handshake rate limit: per-IP window of 30/second
+// ============================================================
+test "ws: handshake rate limit per IP" {
+    const ws_root = @import("modules/websocket/root.zig");
+    defer ws_root.deinit(); // release rate-limit window state
+    var allowed: u32 = 0;
+    var i: u32 = 0;
+    while (i < 30) : (i += 1) {
+        if (ws_root.allowHandshake("1.2.3.4")) allowed += 1;
+    }
+    try std.testing.expectEqual(@as(u32, 30), allowed);
+    // 31st in the same second is rejected
+    try std.testing.expect(!ws_root.allowHandshake("1.2.3.4"));
+    // Different IP unaffected
+    try std.testing.expect(ws_root.allowHandshake("5.6.7.8"));
 }

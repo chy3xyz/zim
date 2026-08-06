@@ -105,8 +105,20 @@ pub const ConversationPersistence = struct {
 
     /// Bulk upsert for group-message fan-out: one multi-row INSERT instead of
     /// N single-row statements (large groups: N round-trips → 1).
+    /// Max rows per multi-row INSERT: keeps parameters under PostgreSQL's
+    /// 65535 bound and statement size sane for very large groups.
+    const MAX_BATCH_ROWS = 500;
+
     pub fn upsertWithLatestBatch(self: *ConversationPersistence, exec: anytype, items: []const UpsertItem) !void {
         if (items.len == 0) return;
+        var idx: usize = 0;
+        while (idx < items.len) : (idx += MAX_BATCH_ROWS) {
+            const chunk = items[idx..@min(idx + MAX_BATCH_ROWS, items.len)];
+            try self.upsertChunk(exec, chunk);
+        }
+    }
+
+    fn upsertChunk(self: *ConversationPersistence, exec: anytype, items: []const UpsertItem) !void {
         const per = 11; // parameters per row
         var sql_builder = std.ArrayList(u8).empty;
         defer sql_builder.deinit(self.allocator);

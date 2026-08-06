@@ -66,6 +66,35 @@ var g_clients_mutex: std.atomic.Mutex = .unlocked;
 var g_clients: std.StringHashMap(std.ArrayList(*WSClient)) = undefined;
 var g_initialized = false;
 
+// Per-IP handshake rate limit (anti connection-flood)
+const MAX_HANDSHAKES_PER_IP_WINDOW: u32 = 30; // per second
+const HandshakeWindow = struct { count: u32, window: i64 };
+var g_hs_windows: std.StringHashMap(HandshakeWindow) = undefined;
+var g_hs_init = false;
+
+pub fn allowHandshake(ip: []const u8) bool {
+    lockMutex();
+    defer g_clients_mutex.unlock();
+    if (!g_hs_init) {
+        g_hs_windows = std.StringHashMap(HandshakeWindow).init(core.getGlobalAllocator());
+        g_hs_init = true;
+    }
+    const now = core.unixNowSeconds();
+    const gop = g_hs_windows.getOrPut(ip) catch return false;
+    if (!gop.found_existing) {
+        // StringHashMap stores keys by reference — dupe caller-owned ip so
+        // deinit can free it (a literal would crash on free).
+        gop.key_ptr.* = core.getGlobalAllocator().dupe(u8, ip) catch return false;
+        gop.value_ptr.* = .{ .count = 0, .window = now };
+    }
+    if (gop.value_ptr.window != now) {
+        gop.value_ptr.window = now;
+        gop.value_ptr.count = 0;
+    }
+    gop.value_ptr.count += 1;
+    return gop.value_ptr.count <= MAX_HANDSHAKES_PER_IP_WINDOW;
+}
+
 pub fn setIo(io: std.Io) void {
     g_io = io;
     g_io_set = true;
@@ -98,6 +127,14 @@ pub fn init() !void {
 }
 
 pub fn deinit() void {
+    // Release handshake rate-limit state FIRST — it is independent of module
+    // init (tests may exercise allowHandshake without starting the server).
+    if (g_hs_init) {
+        var it = g_hs_windows.iterator();
+        while (it.next()) |e| core.getGlobalAllocator().free(e.key_ptr.*);
+        g_hs_windows.deinit();
+        g_hs_init = false;
+    }
     if (!g_initialized) return;
 
     // Stop the accept loop, join the fiber thread (onClose destroys clients),
@@ -143,6 +180,12 @@ pub fn startServer(io: std.Io, allocator: std.mem.Allocator, port: u16) !void {
 /// Creates a heap-allocated WSClient (destroyed in onClose) and registers it
 /// in the global client registry. Returns the client as the session pointer.
 fn onConnect(ctx: *zigmodu.http.Context, framer: *anyopaque) ?*anyopaque {
+    // Per-IP handshake rate limit — reject floods before token work.
+    const client_ip = zigmodu.http.RequestUtil.getRealIp(ctx);
+    if (!allowHandshake(client_ip)) {
+        std.log.warn("[WebSocket] Handshake rate-limited for {s}", .{client_ip});
+        return null;
+    }
     const stream = ctx.stream orelse return null;
     const token = ctx.queryParam("token") orelse return null;
     const send_id = ctx.queryParam("sendID") orelse return null;

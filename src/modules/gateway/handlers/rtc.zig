@@ -34,7 +34,8 @@ pub fn handleRTCMeetingAccept(ctx: *http.Context, _: *GatewayRoutes.State) anyer
             }
         }
         if (!found) {
-            list.append(core.getGlobalAllocator(), model.RtcParticipant{ .user_id = req.userID, .nickname = "", .joined_at = core.unixNowSeconds(), .is_muted = false, .is_video_on = true }) catch {};
+            const user_z = core.getGlobalAllocator().dupe(u8, req.userID) catch return sendFail(ctx, core.ErrorCode.rtc_base, "OOM");
+            list.append(core.getGlobalAllocator(), model.RtcParticipant{ .user_id = user_z, .nickname = "", .joined_at = core.unixNowSeconds(), .is_muted = false, .is_video_on = true }) catch {};
         }
     }
     return sendOk(ctx, null);
@@ -74,14 +75,21 @@ pub fn handleRTCMeetingCreate(ctx: *http.Context, _: *GatewayRoutes.State) anyer
     const room_id = gw_root.generateRoomID(core.getGlobalAllocator()) catch |err| {
         return sendFail(ctx, core.ErrorCode.rtc_meeting_create, @errorName(err));
     };
-    // Note: room_id is owned by the HashMap, do NOT free here
+    // Note: room_id is owned by the HashMap, do NOT free here. All strings
+    // stored in the global RTC maps must be duped to the GLOBAL allocator —
+    // the request arena (bindJson) is reclaimed when the request ends.
+    const host_z = core.getGlobalAllocator().dupe(u8, req.hostUserID) catch return sendFail(ctx, core.ErrorCode.rtc_meeting_create, "OOM");
+    const name_z = core.getGlobalAllocator().dupe(u8, req.meetingName) catch return sendFail(ctx, core.ErrorCode.rtc_meeting_create, "OOM");
     const meetings = gw_root.getRtcMeetings();
-    meetings.put(room_id, model.RtcMeeting{ .room_id = room_id, .host_user_id = req.hostUserID, .meeting_name = req.meetingName, .status = 1, .create_time = core.unixNowSeconds(), .layout = 0, .record_id = null }) catch |err| {
+    meetings.put(room_id, model.RtcMeeting{ .room_id = room_id, .host_user_id = host_z, .meeting_name = name_z, .status = 1, .create_time = core.unixNowSeconds(), .layout = 0, .record_id = null }) catch |err| {
         return sendFail(ctx, core.ErrorCode.rtc_meeting_create_put, @errorName(err));
     };
     const participants = gw_root.getRtcParticipants();
     var list = std.ArrayList(model.RtcParticipant).empty;
-    list.append(core.getGlobalAllocator(), model.RtcParticipant{ .user_id = req.hostUserID, .nickname = "", .joined_at = core.unixNowSeconds(), .is_muted = false, .is_video_on = true }) catch {};
+    // Participant user_id must be a SEPARATE dupe — host_z is owned by the
+    // meetings map (deinit frees it there; sharing would double-free).
+    const host_part_z = core.getGlobalAllocator().dupe(u8, req.hostUserID) catch return sendFail(ctx, core.ErrorCode.rtc_meeting_create, "OOM");
+    list.append(core.getGlobalAllocator(), model.RtcParticipant{ .user_id = host_part_z, .nickname = "", .joined_at = core.unixNowSeconds(), .is_muted = false, .is_video_on = true }) catch {};
     participants.put(room_id, list) catch {};
     return sendOk(ctx, .{ .roomID = room_id });
 }
@@ -136,7 +144,8 @@ pub fn handleRTCMeetingJoin(ctx: *http.Context, _: *GatewayRoutes.State) anyerro
             }
         }
         if (!found) {
-            list.append(core.getGlobalAllocator(), model.RtcParticipant{ .user_id = req.userID, .nickname = "", .joined_at = core.unixNowSeconds(), .is_muted = false, .is_video_on = true }) catch {};
+            const user_z = core.getGlobalAllocator().dupe(u8, req.userID) catch return sendFail(ctx, core.ErrorCode.rtc_base, "OOM");
+            list.append(core.getGlobalAllocator(), model.RtcParticipant{ .user_id = user_z, .nickname = "", .joined_at = core.unixNowSeconds(), .is_muted = false, .is_video_on = true }) catch {};
         }
     }
     return sendOk(ctx, null);

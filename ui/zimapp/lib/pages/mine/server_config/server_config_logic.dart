@@ -22,8 +22,8 @@ class ServerConfigLogic extends GetxController {
     ipCtrl.clear();
     final hintText = isIP.value ? 'ip' : 'web.rentsoft.cn';
     if (isIP.value) {
-      authCtrl.text = 'http://$hintText:10008';
-      imApiCtrl.text = 'http://$hintText:10002';
+      authCtrl.text = 'http://$hintText:10000';
+      imApiCtrl.text = 'http://$hintText:10000';
       imWsCtrl.text = 'ws://$hintText:10001';
     } else {
       ipCtrl.text = 'web.rentsoft.cn';

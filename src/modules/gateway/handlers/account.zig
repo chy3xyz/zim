@@ -34,7 +34,7 @@ pub fn handleAccountLogin(ctx: *http.Context, _: *GatewayRoutes.State) anyerror!
         phoneNumber: ?[]const u8 = null,
         email: ?[]const u8 = null,
         password: []const u8,
-        platform: i32,
+        platform: i32 = 1, // default like RegisterReq; some SDKs omit it
         verifyCode: ?[]const u8 = null,
     };
     const req = ctx.bindJson(LoginReq) catch |err| {
