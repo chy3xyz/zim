@@ -182,6 +182,17 @@ Edit `config/config.yaml`:
 **Phase 69**: zimapp 检查与改善轮 - COMPLETE (检查结论：zim_sdk 纯 Dart 直连后端（HTTP 10000 + WS 10001），登录/消息/WS 契约已对齐，架构健康；改善落地：①配置页默认端口修正（IP 模式 authCtrl/imApiCtrl 10008/10002 → 10000 —— 原为 chat 服务端口，连不上 IM 后端）；②splash 首次连接引导（检测无 serverIP 配置 → 自动进入 ServerConfig 页，部署友好）；③密钥可配置化（webKey/webServerKey/githubClientId 硬编码）因 flutter 工具链权限受限（engine.stamp Operation not permitted，无法编译验证）暂缓记录；RTC 会议前端缺失记为最大功能缺口（需会议 UI，工程量大）；flutter analyze 无法运行（环境权限）—— 前端改动需在 Flutter 环境人工验证）
 **Phase 68**: 前后端联调轮 - COMPLETE (真实联调：后端启动（10000/10001）+ admin 前端（umi 8001，8000 被 php 占用）+ curl 全链路验证（注册 user 嵌套格式/登录 account 字段 imToken/加好友 add_friend_response/单聊群发/会话列表含群成员同步/pull_msg_by_seq key 为 messages/已读/在线状态）；**联调发现并修复 2 个真实问题**：①CORS 预检拒绝前端 SDK 的 `operationid` 自定义头 → corsMiddleware 白名单补 operationid + 预检回显 `Access-Control-Request-Headers`（任意自定义头放行）；②`/account/login` 的 LoginReq.platform 缺默认值（前端 SDK 省略 platform → bindJson InvalidJson 400）→ 加默认 1（对齐 RegisterReq）；admin 登录密码前端固定 MD5 → 改前端传明文（zim 用 PBKDF2，与 Go chat 的 MD5 存储体系不同）；**联调边界**：admin 6 个 chat 专属管理 API（allow_register/get、block/search、default/user|group/search、application/page_versions、organization/get）缺失 —— chat 服务（open-im-chat）未重写，超出 IM 范围；zimapp（Flutter）需模拟器（headless 不可行）；puppeteer MCP 不可用（启动超时）；31/31 全过、CI 6/6 全门禁绿)
 
+## Phase 71: 前端 zimapp 质量评估 + 提分基础（评估 5.5/10）
+
+- 前端评估：架构分层 7（zim_sdk/openim_common/working_circle 本地包体系）、状态管理 7（get）、
+  **测试 3**（zimapp 业务逻辑 0 测试）、质量 5（chat_logic 3191 行）、安全 4（webKey 硬编码）、可观测 6
+- **密钥配置化**（已完成）：`openim_common/config.dart` 的 webKey/webServerKey 改 getter（优先 DataSp 读，
+  新增 `DataSp.webKeyKey`/`webServerKeyKey`），默认值回退 —— 生产可覆盖
+- **协议契约测试**（新增未验证）：`zim_sdk/test/message_model_test.dart`（Message/UserInfo fromJson 契约）
+- **拆分方案文档**：`docs/flutter-improvement-plan.md`（chat_logic 3191 行 → 5 个 mixin 拆分清单 + 测试/CI/上报路线）
+- 约束：**Flutter 工具链在沙箱不可用**（~/ws_flutter 不可写）—— 前端代码改动需 Flutter 环境
+  `flutter analyze` + `flutter test` 验证后合入；当前只合入低风险改动
+
 ## 遗留项（Phase 35 之后）
 
 - **gateway handler 已按域拆分**（Phase 49）：`gateway/handlers.zig` 4125 行拆为 298 行骨架 + `handlers/{helpers,auth,account,user,friend,group,message,conversation,encryption,office,organization,third,statistics,rtc,jssdk,health}.zig` 16 个域文件；新增 handler 遵循同结构

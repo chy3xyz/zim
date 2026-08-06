@@ -19,8 +19,12 @@ class Config {
 
   static const String discoverPageUrl = 'https://docs.openim.io/';
   static const String allowSendMsgNotFriend = '1';
-  static const String webKey = '75a0da9ec836d573102999e99abf4650';
-  static const String webServerKey = '835638634b8f9b4bba386eeec94aa7df';
+  static const String defaultWebKey = '75a0da9ec836d573102999e99abf4650';
+  /// Overridable at runtime (server config page) — avoids shipping the default
+  /// OpenIM web key in production.
+  static String get webKey => DataSp.getString(DataSp.webKeyKey) ?? defaultWebKey;
+  static const String defaultWebServerKey = '835638634b8f9b4bba386eeec94aa7df';
+  static String get webServerKey => DataSp.getString(DataSp.webServerKeyKey) ?? defaultWebServerKey;
   static const String locationHost = 'http://location.xxx.xx';
 
   static String get githubClientId => 'Ov23liElEK8rfHLPScaY';

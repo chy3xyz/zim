@@ -50,6 +50,9 @@ class DataSp {
   ///   "email"    :"",
   /// }
   static Future<bool>? putLoginAccount(Map map) {
+
+  static const String webKeyKey = 'webKey';
+  static const String webServerKeyKey = 'webServerKey';
     return SpUtil().putObject(_loginAccount, map);
   }
 
