@@ -206,6 +206,19 @@ Edit `config/config.yaml`:
 - **CI 前端门禁**：GitHub Actions 新增 `frontend` job（flutter-action 3.35.7 + 各包 pub get + `dart analyze` 0 error 门禁 + zim_sdk flutter test）
 - **密钥配置化**（Phase 71 修正）：`DataSp.getWebKey()/getWebServerKey()` 同步静态方法（非 getString）+ config.dart getter 读之（修正了之前不存在的 DataSp.getString 调用）
 
+## Phase 73: chat_logic 3191 行拆分（前端质量 5→8 的 P0 项）
+
+- **拆分完成**：`lib/pages/chat/chat_logic.dart` 3191 → **1880 行**，按职责拆出 4 个 mixin（`part of` 共享库作用域，私有成员可达，零行为变化）：
+  - `ChatSendLogic`（chat_send_logic.dart，45 方法/818 行）：发送/转发/媒体/删除/输入状态
+  - `ChatMsgDisplayLogic`（chat_msg_display_logic.dart，20 方法/342 行）：消息展示/点击/引用/草稿
+  - `ChatHistoryLogic`（chat_history_logic.dart，11 方法/214 行）：分页拉取/滚动监听/未读/在线状态
+  - `ChatMentionLogic`（chat_mention_logic.dart，4 方法/70 行）：@提及映射/解析
+- **架构**：`abstract class ChatLogicBase extends SuperController`（字段 + 生命周期 + 骨架）→ `class ChatLogic extends ChatLogicBase with ChatSendLogic, ChatMsgDisplayLogic, ChatHistoryLogic, ChatMentionLogic`
+- **抽象声明桥**：基类对 mixin 方法声明抽象（`void _sendMessage(...);` 等），运行时 resolve 到 mixin 实现 —— 解决"基类方法调用 mixin 方法"的循环约束
+- **过程中修复**：花括号配对提取器（parens/in_str 跨行 + 泛型 record `({...})` 跳过 + 箭头函数单行 + 方法名行号排序），`directionalText` 括号错位导致 exit 方法被嵌（exit 成局部函数）已重排修复
+- **结果**：`dart analyze` 0 error / 24 warning（拆分前 0/21，抽象声明 lint 微增）、`flutter test` 4/4 全过、CI 前端门禁（analyze 0 error + flutter test）就绪
+- **教训**：dart 方法提取必须处理（多行签名 parens 跨行、字符串字面量花括号、`({` record 类型、`=>` 箭头函数、无返回类型方法）；删除按行号降序；每步 analyze 验证
+
 ## 遗留项（Phase 35 之后）
 
 - **gateway handler 已按域拆分**（Phase 49）：`gateway/handlers.zig` 4125 行拆为 298 行骨架 + `handlers/{helpers,auth,account,user,friend,group,message,conversation,encryption,office,organization,third,statistics,rtc,jssdk,health}.zig` 16 个域文件；新增 handler 遵循同结构

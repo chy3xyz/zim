@@ -36,6 +36,8 @@ import 'package:scrollview_observer/scrollview_observer.dart';
 
 import 'message_cache.dart';
 
+part 'chat_mention_logic.dart';
+part 'chat_history_logic.dart';
 part 'chat_msg_display_logic.dart';
 part 'chat_send_logic.dart';
 
@@ -180,6 +182,18 @@ abstract class ChatLogicBase extends SuperController {
   }
 
   void viewUserInfo(UserInfo userInfo, {bool isCard = false});
+  void _disposeObserver();
+
+  void _putMemberInfo(List<GroupMembersInfo>? list);
+  void clearCurAtMap();
+  void _setAtMapping({String? faceURL, required String nickname, required String userID});
+  void _handleAtMemberList(memberList, cursor);
+
+  // Abstract declarations for behaviors implemented by ChatHistoryLogic (chat_history_logic.dart).
+  Future<void> _loadHistoryForSyncEnd();
+  void _resetAboutLocateMessage({bool updateMsgs = true});
+  void _setupScrollObserver();
+  void updateUnreadMsgCount({bool isReset = false});
   // Abstract declarations for behaviors implemented by ChatMsgDisplayLogic (chat_msg_display_logic.dart).
   void _addMessage(Message message);
   void _readDraftText();
@@ -512,11 +526,6 @@ abstract class ChatLogicBase extends SuperController {
   }
 
   @override
-  void didChangeMetrics() {
-    super.didChangeMetrics();
-    // Update shrinkWrap in real time as the keyboard pops up or closes.
-    chatObserver.observeSwitchShrinkWrap();
-  }
 
   void _setupTotalUnreadMsgCount() async {
     totalUnreadMsgCount.value = int.parse(await OpenIM.iMManager.conversationManager.getTotalUnreadMsgCount());
@@ -526,29 +535,6 @@ abstract class ChatLogicBase extends SuperController {
     });
   }
 
-  void _setupScrollObserver() {
-    WidgetsBinding.instance.addObserver(this);
-    scrollController.addListener(scrollControllerListener);
-    observerController = ListObserverController(controller: scrollController)..cacheJumpIndexOffset = false;
-
-    chatObserver = ChatScrollObserver(observerController)
-      ..fixedPositionOffset = 5
-      ..toRebuildScrollViewCallback = () {
-        print('toRebuildScrollViewCallback');
-        messageList.refresh();
-      }
-      ..onHandlePositionResultCallback = (result) {
-        if (!needIncrementUnreadMsgCount) return;
-        switch (result.type) {
-          case ChatScrollObserverHandlePositionType.keepPosition:
-            updateUnreadMsgCount(changeCount: result.changeCount);
-            break;
-          case ChatScrollObserverHandlePositionType.none:
-            updateUnreadMsgCount(isReset: true);
-            break;
-        }
-      };
-  }
 
   Widget buildUnreadTipView() {
     return Obx(() => ChatUnreadTipView(
@@ -561,95 +547,17 @@ abstract class ChatLogicBase extends SuperController {
         ));
   }
 
-  void updateUnreadMsgCount({
-    bool isReset = false,
-    int changeCount = 1,
-  }) {
-    needIncrementUnreadMsgCount = false;
-    if (isReset) {
-      unreadMsgCount.value = 0;
-    } else {
-      unreadMsgCount.value += changeCount;
-    }
-  }
 
-  void scrollControllerListener() {
-    const threshold = 2.0;
-    if (scrollController.hasClients &&
-        scrollController.positions.length == 1 &&
-        (scrollController.offset >= scrollController.position.maxScrollExtent - threshold)) {
-      _loadMoreHistory();
-    } else if (_isLocateQuoteMsg &&
-        scrollController.hasClients &&
-        scrollController.positions.length == 1 &&
-        scrollController.offset < 50) {
-      _loadNewestHistory().then((count) {
-        if (count == 0) {
-          _resetAboutLocateMessage(updateMsgs: false);
-        }
-      });
-    }
 
-    if (scrollController.hasClients &&
-        scrollController.positions.length == 1 &&
-        scrollController.offset < 50 &&
-        !_isLocateQuoteMsg) {
-      updateUnreadMsgCount(isReset: true);
-    }
-  }
 
-  void _disposeObserver() {
-    WidgetsBinding.instance.removeObserver(this);
-    observerController.controller?.dispose();
-  }
-
-  void _resetAboutLocateMessage({bool updateMsgs = true}) {
-    if (!_isLocateQuoteMsg) {
-      return;
-    }
-
-    cacheExtentWhenLocateQuoteMsg = null;
-    _isLocateQuoteMsg = false;
-
-    if (!updateMsgs) {
-      return;
-    }
-
-    bool isAllIncluded = _messagesBeforeLocate.every((m) => messageList.value.contains(m));
-
-    if (!isAllIncluded) {
-      messageCache.assignMessages(_messagesBeforeLocate);
-      chatObserver.standby(changeCount: _messagesBeforeLocate.length);
-      messageList.assignAll(_messagesBeforeLocate);
-    }
-  }
 
 
   Future chatSetup() => isSingleChat
       ? AppNavigator.startChatSetup(conversationInfo: conversationInfo)
       : AppNavigator.startGroupChatSetup(conversationInfo: conversationInfo);
 
-  void clearCurAtMap() {
-    // curMsgAtUser.removeWhere((uid) => !inputCtrl.text.contains('@$uid '));
-  }
 
   /// 记录群成员信息
-  void _putMemberInfo(List<GroupMembersInfo>? list) {
-    list?.forEach((member) {
-      _setAtMapping(
-        userID: member.userID!,
-        nickname: member.nickname!,
-        faceURL: member.faceURL,
-      );
-      memberUpdateInfoMap[member.userID!] = member;
-    });
-    // 更新群成员信息
-    messageList.refresh();
-    atUserNameMappingMap[OpenIM.iMManager.userID] = StrRes.you;
-    atUserInfoMappingMap[OpenIM.iMManager.userID] = OpenIM.iMManager.userInfo;
-
-    // DataSp.putAtUserMap(groupID!, atUserNameMappingMap);
-  }
 
 
   /// 发送文字内容，包含普通内容，引用回复内容，@内容
@@ -980,7 +888,6 @@ abstract class ChatLogicBase extends SuperController {
 
   String? get subTile => typing.value ? StrRes.typing : onlineStatusDesc.value;
 
-  bool showOnlineStatus() => !typing.value && onlineStatusDesc.isNotEmpty;
 
   bool enabledReadStatus(Message message) {
     if (message.isNotificationType || message.isCallType || (isGroupChat && groupInfo?.displayIsRead != true)) {
@@ -1001,34 +908,6 @@ abstract class ChatLogicBase extends SuperController {
     return null;
   }
 
-  _handleAtMemberList(memberList, cursor) {
-    if (memberList is List<GroupMembersInfo>) {
-      var buffer = StringBuffer();
-      for (var e in memberList) {
-        _setAtMapping(
-          userID: e.userID!,
-          nickname: e.nickname ?? '',
-          faceURL: e.faceURL,
-        );
-        if (!curMsgAtUser.contains(e.userID)) {
-          curMsgAtUser.add(e.userID!);
-          buffer.write('@${e.userID} ');
-        } else {
-          buffer.write('@${e.userID} ');
-        }
-      }
-      if (cursor < 0) cursor = 0;
-      // 光标前面的内容
-      var start = inputCtrl.text.substring(0, cursor);
-      // 光标后面的内容
-      var end = inputCtrl.text.substring(cursor + 1);
-      inputCtrl.text = '$start$buffer$end';
-      inputCtrl.selection = TextSelection.fromPosition(TextPosition(
-        offset: '$start$buffer'.length,
-      ));
-      _lastCursorIndex = inputCtrl.selection.start;
-    } else {}
-  }
 
 
   void addEmoji(Message message) {
@@ -1342,19 +1221,6 @@ abstract class ChatLogicBase extends SuperController {
     }
   }
 
-  void _setAtMapping({
-    required String userID,
-    required String nickname,
-    String? faceURL,
-  }) {
-    atUserNameMappingMap[userID] = nickname;
-    atUserInfoMappingMap[userID] = UserInfo(
-      userID: userID,
-      nickname: nickname,
-      faceURL: faceURL,
-    );
-    // DataSp.putAtUserMap(groupID!, atUserNameMappingMap);
-  }
 
   /// 未超过24小时
   bool isExceed24H(Message message) {
@@ -1756,12 +1622,6 @@ abstract class ChatLogicBase extends SuperController {
   }
 
   /// 当滚动位置处于底部时，将新镇的消息放入列表里
-  void onScrollToTop() {
-    // if (scrollingCacheMessageList.isNotEmpty) {
-    //   messageList.addAll(scrollingCacheMessageList);
-    //   scrollingCacheMessageList.clear();
-    // }
-  }
 
   String get markText {
     String? phoneNumber = imLogic.userInfo.value.phoneNumber;
@@ -1915,111 +1775,8 @@ abstract class ChatLogicBase extends SuperController {
     return messageCache.hasMore;
   }
 
-  Future<void> _loadMoreHistory() async {
-    final msgs = await messageCache.fetchMessages(
-      count: _pageSize,
-      fetchFromDB: _isLocateQuoteMsg,
-    );
 
-    if (msgs.isEmpty) return;
 
-    final filtered = msgs.where((msg) => !_isBeDeleteMessage(msg)).toList();
-    _formatQuoteRevokeMessage(filtered);
-
-    // Use lock to prevent concurrent modification
-    await _messageListLock.synchronized(() {
-      // Filter out duplicates
-      final newMessages = <Message>[];
-      for (final msg in filtered) {
-        final msgId = msg.clientMsgID ?? '';
-        if (msgId.isNotEmpty && !_messageIds.contains(msgId)) {
-          newMessages.add(msg);
-          _messageIds.add(msgId);
-        }
-      }
-
-      if (newMessages.isNotEmpty) {
-        chatObserver.standby(changeCount: newMessages.length);
-        messageList.addAll(newMessages);
-      }
-    });
-  }
-
-  Future<int> _loadNewestHistory() async {
-    final msgs = await messageCache.fetchMessages(
-      count: _pageSize,
-      reverse: true,
-      fetchFromDB: _isLocateQuoteMsg,
-    );
-    final filtered = msgs.where((msg) => !_isBeDeleteMessage(msg)).toList();
-    _formatQuoteRevokeMessage(filtered);
-
-    int addedCount = 0;
-
-    // Use lock to prevent concurrent modification
-    await _messageListLock.synchronized(() {
-      // Filter out duplicates
-      final newMessages = <Message>[];
-      for (final msg in filtered) {
-        final msgId = msg.clientMsgID ?? '';
-        if (msgId.isNotEmpty && !_messageIds.contains(msgId)) {
-          newMessages.add(msg);
-          _messageIds.add(msgId);
-        }
-      }
-
-      addedCount = newMessages.length;
-
-      if (newMessages.isNotEmpty) {
-        chatObserver.fixedPositionOffset = -1;
-        chatObserver.standby(changeCount: newMessages.length);
-        cacheExtentWhenLocateQuoteMsg = newMessages.length * 200 + 200;
-        messageList.insertAll(0, newMessages);
-      }
-    });
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      chatObserver.fixedPositionOffset = 5;
-    });
-
-    return addedCount;
-  }
-
-  Future<void> _loadHistoryForSyncEnd() async {
-    if (_isLocateQuoteMsg) {
-      return;
-    }
-    final msgs = await messageCache.fetchMessages(
-      count: _pageSize,
-      refresh: true,
-    );
-
-    if (msgs.isEmpty) return;
-
-    final filtered = msgs.where((msg) => !_isBeDeleteMessage(msg)).toList();
-    _formatQuoteRevokeMessage(filtered);
-    final offset =
-        (scrollController.hasClients && scrollController.positions.length == 1) ? scrollController.offset : 0.0;
-
-    // Use lock to prevent concurrent modification
-    await _messageListLock.synchronized(() {
-      chatObserver.standby(changeCount: filtered.length);
-      messageList.assignAll(filtered);
-
-      // Rebuild the message ID set
-      _messageIds.clear();
-      for (final msg in filtered) {
-        final msgId = msg.clientMsgID ?? '';
-        if (msgId.isNotEmpty) {
-          _messageIds.add(msgId);
-        }
-      }
-    });
-
-    if (scrollController.hasClients) {
-      scrollController.jumpTo(offset);
-    }
-  }
 
   bool _isBeDeleteMessage(Message message) {
     final isPrivate = message.attachedInfoElem?.isPrivateChat ?? false;
@@ -2121,4 +1878,4 @@ abstract class ChatLogicBase extends SuperController {
 
 /// Concrete controller — ChatLogicBase holds fields + lifecycle; send-family
 /// behaviors come from ChatSendLogic (see chat_send_logic.dart).
-class ChatLogic extends ChatLogicBase with ChatSendLogic, ChatMsgDisplayLogic {}
+class ChatLogic extends ChatLogicBase with ChatSendLogic, ChatMsgDisplayLogic, ChatHistoryLogic, ChatMentionLogic {}
