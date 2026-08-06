@@ -48,6 +48,12 @@ if ! curl -sf http://localhost:10000/health > /dev/null 2>&1; then
   kill "$ZIM_PID" 2>/dev/null || true
   exit 1
 fi
+# WebSocket real-connection smoke: login → WS handshake → GetMaxSeq(1001)
+if ! python3 ../scripts/ws_smoke.py 10000 10001 > /tmp/zim-ws-smoke.log 2>&1; then
+  echo "WS smoke failed — see /tmp/zim-ws-smoke.log"
+  kill "$ZIM_PID" 2>/dev/null || true
+  exit 1
+fi
 kill "$ZIM_PID" 2>/dev/null || true
 wait "$ZIM_PID" 2>/dev/null || true
 
