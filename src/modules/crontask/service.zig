@@ -23,6 +23,9 @@ pub const CrontaskService = struct {
         return self.pers.cleanupRevokedMessages();
     }
 
+    pub fn queueDepth(self: *CrontaskService) usize {
+        return self.pers.queueDepth();
+    }
     pub fn cleanupOldAuthTokens(self: *CrontaskService) !usize {
         return self.pers.cleanupOldAuthTokens();
     }

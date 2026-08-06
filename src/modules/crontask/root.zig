@@ -1,4 +1,5 @@
 const std = @import("std");
+const core = @import("core");
 const zigmodu = @import("zigmodu");
 const db_mod = @import("../db_postgres.zig");
 const config_mod = @import("../config.zig");
@@ -71,6 +72,11 @@ fn crontaskLoop() void {
             _ = getService().cleanupOldAuthTokens() catch |err| {
                 std.log.err("[Crontask] cleanupOldAuthTokens failed: {}", .{err});
             };
+        }
+
+        // Report PGMQ queue depth (best-effort; skips when pgmq absent).
+        if (getService().queueDepth() > 0) {
+            core.metricQueueDepth(@intCast(getService().queueDepth()));
         }
 
         // 5-minute cadence, but in 1s slices so shutdown (g_running=false)

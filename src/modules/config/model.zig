@@ -19,6 +19,8 @@ pub const GatewayConfig = struct {
 };
 
 pub const JwtConfig = struct {
+    /// When true, startup fails if the JWT secret is still the shipped default.
+    require_strong_secret: bool = false,
     secret: []const u8,
     expiry_hours: u32,
 };

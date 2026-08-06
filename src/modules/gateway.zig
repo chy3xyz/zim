@@ -78,6 +78,8 @@ pub fn corsMiddleware(ctx: *http.Context, next: http.HandlerFn, _: ?*anyopaque) 
     core.metricHttpRequest();
     try ctx.setHeader("Access-Control-Allow-Origin", "*");
     try ctx.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    // JSON API server: deny all browser content loading by default.
+    try ctx.setHeader("Content-Security-Policy", "default-src 'none'");
     // Echo the preflight-requested headers so any SDK custom header (e.g.
     // OpenIM's `operationid`) passes CORS without per-header whitelisting.
     const allow_headers = ctx.header("access-control-request-headers") orelse

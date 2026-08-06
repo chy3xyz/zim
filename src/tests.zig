@@ -440,7 +440,10 @@ fn buildTestServer(allocator: std.mem.Allocator) !struct { server: zigmodu.http.
     const io = std.testing.io;
 
     var server = zigmodu.http.Server.init(io, allocator, 0);
-    try server.addMiddleware(.{ .func = gateway.requestArenaMiddleware });
+    // NOTE: production mounts requestArenaMiddleware here, but tests manage the
+    // request arena via IntegrationCtx — mounting it would reset requestAllocator
+    // to null after each dispatch (leaking later service results onto the global
+    // allocator), so it is intentionally omitted.
     try server.addMiddleware(.{ .func = gateway.corsMiddleware });
     try server.addMiddleware(.{ .func = gateway.authMiddleware });
 
@@ -1467,4 +1470,75 @@ test "ws: handshake rate limit per IP" {
     try std.testing.expect(!ws_root.allowHandshake("1.2.3.4"));
     // Different IP unaffected
     try std.testing.expect(ws_root.allowHandshake("5.6.7.8"));
+}
+
+// ============================================================
+// Handler contract: user/group/conversation domain endpoints
+// ============================================================
+test "handler contract: user/group/conversation" {
+    const allocator = std.testing.allocator;
+    var ctx = IntegrationCtx.init(allocator) orelse return;
+    defer ctx.deinit();
+
+    const auth_mod = @import("modules/auth.zig");
+    const group_mod = @import("modules/group.zig");
+    const a = try ctx.register("uc_a");
+    const b = try ctx.register("uc_b");
+    const tok = try auth_mod.loginWithPassword(a, "test1234", 1);
+    const mk = struct {
+        fn hdr(t: []const u8) zigmodu.http.Testkit.HeaderPair {
+            return .{ "token", t };
+        }
+    }.hdr;
+
+    var kit_arena = std.heap.ArenaAllocator.init(allocator);
+    defer kit_arena.deinit();
+    var holder = try buildTestServer(kit_arena.allocator());
+    defer {
+        holder.catalog.deinit();
+        holder.server.deinit();
+    }
+
+    // /user/update_user_info — profile update
+    var up = try zigmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/user/update_user_info", .{
+        .body = try std.fmt.allocPrint(ctx.arena_ptr.allocator(), "{{\"userID\":\"{s}\",\"nickname\":\"UC Renamed\"}}", .{a}),
+        .headers = &.{mk(tok.token)},
+    });
+    defer up.deinit(kit_arena.allocator());
+    try std.testing.expect(std.mem.indexOf(u8, up.body, "\"errCode\":0") != null);
+
+    // /group/get_groups — group list with total
+    const gid = try group_mod.createGroup(.{ .group_name = "UC Group", .creator_user_id = a, .member_user_ids = &.{b} });
+    // Group result strings may land on the global allocator (service results
+    // outside a request arena) — free via getAllocator (no-op under arena).
+    defer {
+        core.getAllocator().free(gid.group_id);
+        core.getAllocator().free(gid.group_name);
+        core.getAllocator().free(gid.creator_user_id);
+    }
+    var gg = try zigmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/group/get_groups", .{
+        .body = try std.fmt.allocPrint(ctx.arena_ptr.allocator(), "{{\"userID\":\"{s}\",\"groupIDs\":[\"{s}\"]}}", .{ a, gid.group_id }),
+        .headers = &.{mk(tok.token)},
+    });
+    defer gg.deinit(kit_arena.allocator());
+    try std.testing.expect(std.mem.indexOf(u8, gg.body, "\"errCode\":0") != null);
+
+    // Group conversation is created on first group message — send one first.
+    _ = try @import("modules/message.zig").sendMessage(.{
+        .send_id = a,
+        .recv_id = b,
+        .group_id = gid.group_id,
+        .session_type = .group,
+        .content_type = .text,
+        .content = "create conv",
+    });
+
+    // /conversation/get_conversation — single conversation lookup
+    var gc = try zigmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/conversation/get_conversation", .{
+        .body = try std.fmt.allocPrint(ctx.arena_ptr.allocator(), "{{\"ownerUserID\":\"{s}\",\"conversationID\":\"sg_{s}\"}}", .{ a, gid.group_id }),
+        .headers = &.{mk(tok.token)},
+    });
+    defer gc.deinit(kit_arena.allocator());
+    try std.testing.expect(std.mem.indexOf(u8, gc.body, "\"errCode\":0") != null);
+    try std.testing.expect(std.mem.indexOf(u8, gc.body, "\"conversationID\"") != null);
 }

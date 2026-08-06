@@ -306,10 +306,14 @@ pub fn main(init: std.process.Init) !void {
     }
 
     // Initialize third-party services (RustFS object storage)
-    // Warn loudly when the JWT secret is still the shipped default.
-    if (std.mem.eql(u8, cfg.jwt.secret, "zim-secret-change-in-production") or
-        std.mem.eql(u8, cfg.jwt.secret, "zim-secret"))
-    {
+    // The JWT secret must not be the shipped default in production.
+    const weak_secret = std.mem.eql(u8, cfg.jwt.secret, "zim-secret-change-in-production") or
+        std.mem.eql(u8, cfg.jwt.secret, "zim-secret");
+    if (weak_secret and cfg.jwt.require_strong_secret) {
+        core.logErr("Refusing to start: [jwt] secret is the shipped default and require_strong_secret=true. Set a strong secret in config.yaml.", .{});
+        return error.WeakJwtSecret;
+    }
+    if (weak_secret) {
         core.logWarn("JWT secret is the default value — set [jwt] secret in config.yaml before production!", .{});
     }
     third.initStorage(.{

@@ -49,9 +49,27 @@ pub const CrontaskPersistence = struct {
     pub fn cleanupOldAuthTokens(self: *CrontaskPersistence) !usize {
         const sql = "DELETE FROM auth_tokens WHERE expire_time < NOW()";
         const affected = self.db.exec(sql) catch |err| {
-            std.log.err("[Crontask] Failed to cleanup old auth tokens: {}", .{err});
+            core.logJson(.{ .event = "crontask_cleanup_failed", .module = "crontask", .level = "error", .err = @errorName(err) });
             return err;
         };
         return affected;
+    }
+
+    /// Best-effort total depth across the well-known PGMQ queues.
+    /// Returns 0 when the pgmq extension is unavailable.
+    pub fn queueDepth(self: *CrontaskPersistence) usize {
+        const sql = "SELECT COALESCE(SUM((pgmq.metrics('push_notification')).queue_length), 0) + COALESCE(SUM((pgmq.metrics('offline_push')).queue_length), 0)";
+        const result = self.db.query(sql) catch return 0;
+        defer {
+            for (result.rows) |row| {
+                for (row) |cell| core.getGlobalAllocator().free(cell);
+                core.getGlobalAllocator().free(row);
+            }
+            core.getGlobalAllocator().free(result.rows);
+        }
+        if (result.row_count > 0 and result.rows[0].len > 0) {
+            return std.fmt.parseInt(usize, result.rows[0][0], 10) catch 0;
+        }
+        return 0;
     }
 };

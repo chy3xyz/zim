@@ -322,7 +322,7 @@ cd src && zig build run
 
 ## Framework
 
-[zigmodu](https://github.com/chy3xyz/zigmodu) v0.15.12 (local source `~/w4_proj/zig_ws/zigmodu`, HEAD 70eefaf = 远程同步；v0.15.12 含 RateLimiterRegistry 导出、audit b18 伪事务守卫、AI 原子 metrics；Zig toolchain 0.17.0-dev.1567) provides:
+[zigmodu](https://github.com/chy3xyz/zigmodu) v0.15.16 (local source `~/w4_proj/zig_ws/zigmodu`, HEAD 21522e9 = 远程同步；v0.15.13-16 含 JWT credential version、CircuitBreaker.callWithContext、HttpClient requestStream 修复、Agent streaming；Zig toolchain 0.17.0-dev.1567) provides:
 - Module system with lifecycle (init/deinit)
 - Dependency validation at startup
 - Event bus (`TypedEventBus`, `ThreadSafeEventBus`) for decoupled communication

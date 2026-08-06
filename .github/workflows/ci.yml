@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: n0x
+          POSTGRES_DB: zim
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U n0x"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.17.0-dev.1567
+
+      - name: Checkout zigmodu dependency
+        # build.zig.zon resolves `../../../zig_ws/zigmodu` from src/, i.e.
+        # GITHUB_WORKSPACE/../../zig_ws/zigmodu on a standard runner.
+        uses: actions/checkout@v4
+        with:
+          repository: chy3xyz/zigmodu
+          ref: v0.15.12
+          path: ../../zig_ws/zigmodu
+
+      - name: Build
+        working-directory: src
+        run: zig build
+
+      - name: Test
+        working-directory: src
+        run: zig build test
+
+      - name: Format check
+        working-directory: src
+        run: zig fmt --check build.zig main.zig core.zig tests.zig modules/ proto/
+
+      - name: Build zmodu CLI (audit/deadcode)
+        working-directory: ../../zig_ws/zigmodu/tools/zmodu
+        run: zig build --prefix $GITHUB_WORKSPACE/.zmodu-ci
+
+      - name: Audit + deadcode
+        working-directory: src
+        run: |
+          $GITHUB_WORKSPACE/.zmodu-ci/bin/zmodu audit .
+          $GITHUB_WORKSPACE/.zmodu-ci/bin/zmodu deadcode .
+
+      - name: Smoke (boot + health)
+        working-directory: src
+        run: |
+          ./zig-out/bin/zim > /tmp/zim-ci.log 2>&1 &
+          for i in $(seq 1 20); do
+            curl -sf http://localhost:10000/health >/dev/null 2>&1 && break
+            sleep 0.5
+          done
+          curl -sf http://localhost:10000/health >/dev/null || { cat /tmp/zim-ci.log; exit 1; }
+          kill %1 || true

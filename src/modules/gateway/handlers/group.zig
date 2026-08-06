@@ -300,7 +300,8 @@ pub fn handleGetGroups(ctx: *http.Context, _: *GatewayRoutes.State) anyerror!voi
             try groups_json.append(core.getAllocator(), dto.groupToJson(g));
         }
     }
-    return sendOk(ctx, .{ .total = groups_json.items.len, .groups = groups_json.items });
+    // Go GetGroupsInfoResp: { groupInfos: [...] }
+    return sendOk(ctx, .{ .groupInfos = groups_json.items });
 }
 
 pub fn handleGetGroupsInfo(ctx: *http.Context, _: *GatewayRoutes.State) anyerror!void {

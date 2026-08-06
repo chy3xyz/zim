@@ -404,7 +404,7 @@ pub fn metricPushFailed() void {
 }
 
 pub fn metricQueueDepth(depth: i64) void {
-    if (g_metric_queue_depth) |g| g.set(depth);
+    if (g_metric_queue_depth) |g| g.set(@floatFromInt(depth));
 }
 
 pub fn metricDbDuration(seconds: f64) void {
