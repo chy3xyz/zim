@@ -92,28 +92,6 @@ class _PreviewPicturePageState extends State<PreviewPicturePage> {
                       cache: true,
                       fit: BoxFit.fitWidth,
                     );
-                    final ImageChunkEvent? loadingProgress =
-                        state.loadingProgress;
-                    final double? progress =
-                        loadingProgress?.expectedTotalBytes != null
-                            ? loadingProgress!.cumulativeBytesLoaded /
-                                loadingProgress.expectedTotalBytes!
-                            : null;
-                    // CupertinoActivityIndicator()
-                    return SizedBox(
-                      width: 15.0,
-                      height: 15.0,
-                      child: Center(
-                        child: SizedBox(
-                          width: 15.0,
-                          height: 15.0,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 1.5,
-                            value: progress,
-                          ),
-                        ),
-                      ),
-                    );
                   }
                 case LoadState.completed:
                   return null;

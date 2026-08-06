@@ -8,12 +8,12 @@ import 'package:openim_common/openim_common.dart';
 
 class ChatQuoteView extends StatelessWidget {
   const ChatQuoteView({
-    Key? key,
+    super.key,
     required this.quoteMsg,
     this.onTap,
     this.onTapLocate,
     this.popupMenuController,
-  }) : super(key: key);
+  });
   final Message quoteMsg;
   final Function(Message message)? onTap;
   final Function(Message message)? onTapLocate;
@@ -42,7 +42,7 @@ class ChatQuoteView extends StatelessWidget {
 }
 
 class _ChatQuoteContentView extends StatelessWidget {
-  const _ChatQuoteContentView({Key? key, required this.message}) : super(key: key);
+  const _ChatQuoteContentView({required this.message});
   final Message message;
 
   final _decoder = const JsonDecoder();

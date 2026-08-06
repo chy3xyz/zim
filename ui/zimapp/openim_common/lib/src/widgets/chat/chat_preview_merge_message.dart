@@ -4,7 +4,6 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
 import 'package:openim_common/openim_common.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'chat_quote_view.dart';
 
 class ChatPreviewMergeMsgView extends StatefulWidget {
   const ChatPreviewMergeMsgView({super.key, required this.messageList, required this.title, this.meetingItemClick});

@@ -20,7 +20,7 @@ class DownloadController extends GetxController {
     super.onInit();
   }
 
-  _initDir() async {
+  Future<void> _initDir() async {
     savedDir ??= await IMUtils.getDownloadFileDir();
   }
 

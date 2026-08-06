@@ -29,14 +29,14 @@ class SearchFriendLogic extends GetxController {
   bool get isSearchNotResult =>
       searchCtrl.text.trim().isNotEmpty && resultList.isEmpty;
 
-  _clearInput() {
+  void _clearInput() {
     final key = searchCtrl.text.trim();
     if (key.isEmpty) {
       resultList.clear();
     }
   }
 
-  search() async {
+  Future<void> search() async {
     var key = searchCtrl.text.trim();
     resultList.clear();
     if (key.isNotEmpty) {
@@ -50,7 +50,7 @@ class SearchFriendLogic extends GetxController {
     }
   }
 
-  viewFriendInfo(ISUserInfo info) => AppNavigator.startUserProfilePane(
+  dynamic viewFriendInfo(ISUserInfo info) => AppNavigator.startUserProfilePane(
         userID: info.userID!,
         offAndToNamed: true,
       );

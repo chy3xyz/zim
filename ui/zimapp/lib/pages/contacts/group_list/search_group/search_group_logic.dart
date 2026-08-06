@@ -28,14 +28,14 @@ class SearchGroupLogic extends GetxController {
   bool get isSearchNotResult =>
       searchCtrl.text.trim().isNotEmpty && resultList.isEmpty;
 
-  _clearInput() {
+  void _clearInput() {
     final key = searchCtrl.text.trim();
     if (key.isEmpty) {
       resultList.clear();
     }
   }
 
-  search() async {
+  Future<void> search() async {
     var key = searchCtrl.text.trim();
 
     final result = await OpenIM.iMManager.groupManager

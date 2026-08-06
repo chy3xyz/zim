@@ -53,7 +53,7 @@ class LoadingView {
     _overlayState?.insert(_overlayEntry!);
   }
 
-  dismiss() async {
+  Future<void> dismiss() async {
     if (!_isVisible && !isProgressVisible) return;
     _overlayEntry?.remove();
     _progressOverlayEntry?.remove();

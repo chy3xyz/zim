@@ -3,6 +3,7 @@
 /// Copyright © 2021 & onwards, Hitesh Kumar Saini <saini123hitesh@gmail.com>.
 /// All rights reserved.
 /// Use of this source code is governed by MIT license that can be found in the LICENSE file.
+library;
 // ignore_for_file: non_constant_identifier_names
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -953,10 +954,9 @@ class _BackwardSeekIndicator extends StatefulWidget {
   final void Function(Duration) onChanged;
   final void Function(Duration) onSubmitted;
   const _BackwardSeekIndicator({
-    Key? key,
     required this.onChanged,
     required this.onSubmitted,
-  }) : super(key: key);
+  });
 
   @override
   State<_BackwardSeekIndicator> createState() => _BackwardSeekIndicatorState();
@@ -1040,10 +1040,9 @@ class _ForwardSeekIndicator extends StatefulWidget {
   final void Function(Duration) onChanged;
   final void Function(Duration) onSubmitted;
   const _ForwardSeekIndicator({
-    Key? key,
     required this.onChanged,
     required this.onSubmitted,
-  }) : super(key: key);
+  });
 
   @override
   State<_ForwardSeekIndicator> createState() => _ForwardSeekIndicatorState();

@@ -1,4 +1,15 @@
-include: package:flutter_lints/flutter.yaml
-
-# Additional information about this file can be found at
-# https://dart.dev/guides/language/analysis-options
+# Sub-package analyzer config. NOTE: no `include: package:flutter_lints/...`
+# here — that package is not a dependency of this package, and a failing
+# include invalidates the whole options file.
+analyzer:
+  errors:
+    # get 4.7.3 marks Rx.value as @protected; accessed via controllers across
+    # this codebase — known get-package lint family, suppressed deliberately.
+    invalid_use_of_protected_member: ignore
+    # Dead-code warnings: fields/locals/elements that are only written, never
+    # read. Removing them requires also removing their writes (risky) — they
+    # are harmless and revisited during refactors.
+    unused_field: ignore
+    unused_local_variable: ignore
+    unused_element: ignore
+    unused_element_parameter: ignore

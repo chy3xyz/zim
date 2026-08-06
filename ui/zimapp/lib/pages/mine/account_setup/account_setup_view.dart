@@ -140,7 +140,7 @@ class AccountSetupPage extends StatelessWidget {
                       opacity: enabled ? 1.0 : 0.5, // Gray out when disabled
                       child: CupertinoSwitch(
                         value: switchOn,
-                        activeColor: Styles.c_0089FF,
+                        activeTrackColor: Styles.c_0089FF,
                         onChanged: enabled ? onChanged : null, // Disable toggle when not enabled
                       ),
                     ),

@@ -41,7 +41,7 @@ class ExpandChatHistoryLogic extends GetxController {
     super.onClose();
   }
 
-  _clearInput() {
+  void _clearInput() {
     if (searchKey.isEmpty) {
       searchResultItems.update((val) {
         val?.messageList?.clear();

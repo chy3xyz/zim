@@ -35,7 +35,7 @@ class GroupProfilePanelLogic extends GetxController {
     super.onInit();
   }
 
-  _onChanged(dynamic value) {
+  void _onChanged(dynamic value) {
     if (value is GroupApplicationInfo) {
       if (value.groupID == groupInfo.value.groupID && value.handleResult == 1) {
         if (!isJoined.value) {
@@ -64,7 +64,7 @@ class GroupProfilePanelLogic extends GetxController {
     }
   }
 
-  _getGroupInfo() async {
+  Future<void> _getGroupInfo() async {
     var list = await OpenIM.iMManager.groupManager.getGroupsInfo(
       groupIDList: [groupInfo.value.groupID],
     );
@@ -80,13 +80,13 @@ class GroupProfilePanelLogic extends GetxController {
     }
   }
 
-  _checkGroup() async {
+  Future<void> _checkGroup() async {
     isJoined.value = await OpenIM.iMManager.groupManager.isJoinedGroup(
       groupID: groupInfo.value.groupID,
     );
   }
 
-  _getMembers() async {
+  Future<void> _getMembers() async {
     var list = await OpenIM.iMManager.groupManager.getGroupMemberList(
       groupID: groupInfo.value.groupID,
       count: 10,
@@ -94,7 +94,7 @@ class GroupProfilePanelLogic extends GetxController {
     members.assignAll(list);
   }
 
-  enterGroup() async {
+  Future<void> enterGroup() async {
     if (isJoined.value) {
       conversationLogic.toChat(
         groupID: groupInfo.value.groupID,

@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:math' show min, max;
+import 'dart:math' show min;
 
 import 'package:zim_sdk/zim_sdk.dart';
 import 'package:openim_common/openim_common.dart';

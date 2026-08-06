@@ -39,7 +39,7 @@ class SearchChatHistoryLogic extends GetxController {
     }
   }
 
-  clearInput() {
+  void clearInput() {
     searchKey.value = "";
     focusNode.requestFocus();
     messageList.clear();
@@ -75,7 +75,7 @@ class SearchChatHistoryLogic extends GetxController {
     }
   }
 
-  load() async {
+  Future<void> load() async {
     try {
       var result = await OpenIM.iMManager.messageManager.searchLocalMessages(
         conversationID: conversationInfo.conversationID,

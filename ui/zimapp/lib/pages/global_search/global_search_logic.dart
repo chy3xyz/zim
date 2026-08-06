@@ -32,7 +32,7 @@ class GlobalSearchLogic extends CommonSearchLogic {
   int fileMessagePageIndex = 1;
   int count = 20;
 
-  switchTab(int index) {
+  void switchTab(int index) {
     this.index.value = index;
   }
 
@@ -51,7 +51,7 @@ class GlobalSearchLogic extends CommonSearchLogic {
       textSearchResultItems.isEmpty &&
       fileMessageList.isEmpty;
 
-  search() async {
+  Future<void> search() async {
     final result = await LoadingView.singleton.wrap(
         asyncFunction: () => Future.wait([
               searchFriend(),
@@ -197,7 +197,7 @@ abstract class CommonSearchLogic extends GetxController {
     super.onClose();
   }
 
-  _clearInput() {
+  void _clearInput() {
     if (searchKey.isEmpty) {
       clearList();
     }

@@ -3,12 +3,12 @@ import 'package:openim_common/openim_common.dart';
 
 class ChatDestroyAfterReadingView extends StatelessWidget {
   const ChatDestroyAfterReadingView({
-    Key? key,
+    super.key,
     required this.hasRead,
     required this.isPrivateChat,
     required this.readingDuration,
     this.onStartDestroy,
-  }) : super(key: key);
+  });
   final bool hasRead;
   final bool isPrivateChat;
   final int readingDuration;

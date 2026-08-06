@@ -37,7 +37,7 @@ class SelectContactsFromFriendsLogic extends FriendListLogic {
 
   bool _remove(ISUserInfo info) => !selectContactsLogic.isDefaultChecked(info);
 
-  selectAll() {
+  void selectAll() {
     if (isSelectAll) {
       for (var info in operableList) {
         selectContactsLogic.removeItem(info);

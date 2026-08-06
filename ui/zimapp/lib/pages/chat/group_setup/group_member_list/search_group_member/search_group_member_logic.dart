@@ -203,7 +203,6 @@ class SearchGroupMemberLogic extends GetxController {
         return _shouldHideMemberForDeletion(member);
         
       case GroupMemberOpType.view:
-      default:
         return false;
     }
   }
@@ -246,7 +245,6 @@ class SearchGroupMemberLogic extends GetxController {
         break;
         
       case GroupMemberOpType.view:
-      default:
         _viewMemberProfile(member);
         break;
     }

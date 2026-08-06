@@ -263,7 +263,7 @@ class WorkMomentsListPage extends StatelessWidget {
                       onTap: logic.viewMyProfilePanel,
                     ),
                     12.horizontalSpace,
-                    (logic.nickname ?? '').toText
+                    logic.nickname.toText
                       ..style = Styles.ts_FFFFFF_18sp_medium,
                   ],
                 ),

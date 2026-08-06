@@ -15,7 +15,7 @@ enum RecordBarStatus {
 
 class ChatVoiceRecordBar extends StatefulWidget {
   const ChatVoiceRecordBar({
-    Key? key,
+    super.key,
     required this.onLongPressStart,
     required this.onLongPressEnd,
     required this.onLongPressMoveUpdate,
@@ -23,7 +23,7 @@ class ChatVoiceRecordBar extends StatefulWidget {
     this.speakTextStyle,
     this.interruptListener,
     this.onChangedBarStatus,
-  }) : super(key: key);
+  });
   final Function(LongPressStartDetails details) onLongPressStart;
   final Function(LongPressEndDetails details) onLongPressEnd;
   final Function(LongPressMoveUpdateDetails details) onLongPressMoveUpdate;

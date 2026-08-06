@@ -191,7 +191,7 @@ class GroupMemberListPage extends StatelessWidget {
 }
 
 class SelectedMemberListView extends StatelessWidget {
-  SelectedMemberListView({Key? key}) : super(key: key);
+  SelectedMemberListView({super.key});
   final logic = Get.find<GroupMemberListLogic>(tag: (Get.arguments['opType'] as GroupMemberOpType).name);
 
   @override

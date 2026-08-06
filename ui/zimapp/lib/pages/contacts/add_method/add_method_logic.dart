@@ -4,14 +4,14 @@ import 'package:openim/pages/contacts/add_by_search/add_by_search_logic.dart';
 import 'package:openim/routes/app_navigator.dart';
 
 class AddContactsMethodLogic extends GetxController {
-  scan() => AppNavigator.startScan();
+  dynamic scan() => AppNavigator.startScan();
 
-  addFriend() =>
+  dynamic addFriend() =>
       AppNavigator.startAddContactsBySearch(searchType: SearchType.user);
 
-  createGroup() => AppNavigator.startCreateGroup(
+  dynamic createGroup() => AppNavigator.startCreateGroup(
       defaultCheckedList: [OpenIM.iMManager.userInfo]);
 
-  addGroup() =>
+  dynamic addGroup() =>
       AppNavigator.startAddContactsBySearch(searchType: SearchType.group);
 }

@@ -8,14 +8,14 @@ import 'package:should_rebuild/should_rebuild.dart';
 
 class ChatEmojiView extends StatefulWidget {
   const ChatEmojiView({
-    Key? key,
+    super.key,
     this.favoriteList = const [],
     this.onAddFavorite,
     this.onSelectedFavorite,
     required this.textEditingController,
     this.height,
     this.customEmojiLayout,
-  }) : super(key: key);
+  });
   final List<String> favoriteList;
   final Function()? onAddFavorite;
   final Function(int index, String url)? onSelectedFavorite;
@@ -139,10 +139,10 @@ class _ChatEmojiViewState extends State<ChatEmojiView> {
 
 class EmojiLayout extends StatelessWidget {
   const EmojiLayout({
-    Key? key,
+    super.key,
     required this.controller,
     this.height,
-  }) : super(key: key);
+  });
   final TextEditingController controller;
   final double? height;
 

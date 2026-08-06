@@ -5,7 +5,6 @@ import 'package:openim_working_circle/openim_working_circle.dart';
 import 'package:pull_to_refresh_new/pull_to_refresh.dart';
 import 'package:sprintf/sprintf.dart';
 
-import '../../w_apis.dart';
 
 class NewMessageLogic extends GetxController {
   final refreshCtrl = RefreshController();
@@ -27,7 +26,7 @@ class NewMessageLogic extends GetxController {
 
   /// 工作圈消息类型    0为普通评论 1为被喜欢 2为AT提醒看的朋友圈
   /// notificationMsgType
-  refreshNewMessage() async {
+  Future<void> refreshNewMessage() async {
     var list = await _request(pageNo = 1);
     this.list.assignAll(list);
     refreshCtrl.refreshCompleted();

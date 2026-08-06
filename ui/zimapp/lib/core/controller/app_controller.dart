@@ -114,7 +114,9 @@ class AppController extends GetxController with UpgradeManger {
         message.attachedInfoElem?.notSenderNotificationPush == true ||
         message.contentType == im.MessageType.typing ||
         message.sendID == OpenIM.iMManager.userID ||
-        (message.contentType! >= 1000 && message.contentType != 1400)) return;
+        (message.contentType! >= 1000 && message.contentType != 1400)) {
+      return;
+    }
 
     // 开启免打扰的不提示
     var sourceID = message.sessionType == ConversationType.single ? message.sendID : message.groupID;

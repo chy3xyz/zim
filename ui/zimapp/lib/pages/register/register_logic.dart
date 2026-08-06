@@ -35,7 +35,7 @@ class RegisterLogic extends GetxController {
     super.onInit();
   }
 
-  _onChanged() {
+  void _onChanged() {
     enabled.value = needInvitationCodeRegister
         ? phoneCtrl.text.trim().isNotEmpty &&
             invitationCodeCtrl.text.trim().isNotEmpty

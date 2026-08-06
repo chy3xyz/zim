@@ -430,21 +430,6 @@ class Apis {
   /// robots
   static Future<Map<String, dynamic>> getClientConfig() async {
     return {'discoverPageURL': Config.discoverPageUrl, 'allowSendMsgNotFriend': Config.allowSendMsgNotFriend};
-    try {
-      var result = await HttpUtil.post(
-        Urls.getClientConfig,
-        data: {
-          // 'operationID': operationID,
-        },
-        options: chatTokenOptions,
-        showErrorToast: false,
-      );
-      return result['config'] ?? {};
-    } catch (e, s) {
-      _catchErrorHelper(e, s);
-
-      return {};
-    }
   }
 
   /// 查询tag组

@@ -13,7 +13,7 @@ import 'package:qr_code_scanner_plus/qr_code_scanner_plus.dart';
 import 'qr_scan_box.dart';
 
 class QrcodeView extends StatefulWidget {
-  const QrcodeView({Key? key}) : super(key: key);
+  const QrcodeView({super.key});
 
   @override
   State<QrcodeView> createState() => _QrcodeViewState();

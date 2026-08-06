@@ -193,6 +193,19 @@ Edit `config/config.yaml`:
 - 约束：**Flutter 工具链在沙箱不可用**（~/ws_flutter 不可写）—— 前端代码改动需 Flutter 环境
   `flutter analyze` + `flutter test` 验证后合入；当前只合入低风险改动
 
+## Phase 72: 前端 zimapp 提分（工具链恢复 + analyze 清零 + 协议测试 + CI 门禁）
+
+- **沙箱放开**：`reasonix.toml`（项目级）`bash = "off"` + `allow_write` 含 `~/ws_flutter` 与 zigmodu —— flutter/dart 工具链恢复可用
+- **analyze 清零**（2211 → 0 error / 21 warning / 117 issues）：
+  - 排除死包 `flutter_openim_sdk`/`local_plugin`（无引用残留）；给 openim_common/working_circle/organization/zim_sdk 补 `publish_to: none` + 子包 `analysis_options.yaml`（根包配置不传播）
+  - 各子包补 `dart pub get`（缺失 package_config 导致 50 个假 uri_does_not_exist error）
+  - 修复真实 bug：chat_input_box `_SubView` 复制粘贴错误（content 分支渲染 `title!`）、apis.getClientConfig 不可达死代码、preview_picture_view 死代码、photo_browser_bottom_bar 参数 `this.` 丢失、3 处 unreachable_switch_default、2 处 catchError 返回 void
+  - **注意**：`dart fix --apply` 会引入错误（给 AppNavigator/Apis 加 `Future?` 显式类型、删 const 构造/字段参数）—— 使用后必须 analyze 复核，必要时 `git checkout` 回滚
+  - 已知保留：get 4.7.3 `Rx.value` protected lint（analysis_options ignore，get 升级时复评）、unused 死代码（删除需连带赋值语句，风险高，注释说明后 ignore）
+- **协议契约测试**：`zim_sdk/test/message_model_test.dart` 4 个测试全过（`flutter test` 可用；`flutter analyze` 自身崩溃（analysis server 退出 64）用 `dart analyze` 替代）
+- **CI 前端门禁**：GitHub Actions 新增 `frontend` job（flutter-action 3.35.7 + 各包 pub get + `dart analyze` 0 error 门禁 + zim_sdk flutter test）
+- **密钥配置化**（Phase 71 修正）：`DataSp.getWebKey()/getWebServerKey()` 同步静态方法（非 getString）+ config.dart getter 读之（修正了之前不存在的 DataSp.getString 调用）
+
 ## 遗留项（Phase 35 之后）
 
 - **gateway handler 已按域拆分**（Phase 49）：`gateway/handlers.zig` 4125 行拆为 298 行骨架 + `handlers/{helpers,auth,account,user,friend,group,message,conversation,encryption,office,organization,third,statistics,rtc,jssdk,health}.zig` 16 个域文件；新增 handler 遵循同结构

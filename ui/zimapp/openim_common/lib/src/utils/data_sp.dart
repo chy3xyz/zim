@@ -26,7 +26,7 @@ class DataSp {
 
   DataSp._();
 
-  static init() async {
+  static Future<void> init() async {
     await SpUtil().init();
   }
 
@@ -50,11 +50,15 @@ class DataSp {
   ///   "email"    :"",
   /// }
   static Future<bool>? putLoginAccount(Map map) {
+    return SpUtil().putObject(_loginAccount, map);
+  }
 
   static const String webKeyKey = 'webKey';
   static const String webServerKeyKey = 'webServerKey';
-    return SpUtil().putObject(_loginAccount, map);
-  }
+
+  static String? getWebKey() => SpUtil().getString(webKeyKey);
+
+  static String? getWebServerKey() => SpUtil().getString(webServerKeyKey);
 
   static LoginCertificate? getLoginCertificate() {
     return SpUtil().getObj(_loginCertificate, (v) => LoginCertificate.fromJson(v.cast()));

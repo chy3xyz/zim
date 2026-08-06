@@ -6,11 +6,11 @@ import 'package:openim_common/openim_common.dart';
 
 class ChatLocationView extends StatelessWidget {
   const ChatLocationView({
-    Key? key,
+    super.key,
     required this.description,
     required this.latitude,
     required this.longitude,
-  }) : super(key: key);
+  });
   final String description;
   final double latitude;
   final double longitude;

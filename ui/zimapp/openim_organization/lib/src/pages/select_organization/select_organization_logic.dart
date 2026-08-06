@@ -68,7 +68,7 @@ class SelectContactsFromOrganizationLogic extends GetxController {
     }
   }
 
-  selectAll() {
+  void selectAll() {
     if (isSelectAll) {
       for (var info in operableList) {
         bridge.removeItem(info);
@@ -83,7 +83,7 @@ class SelectContactsFromOrganizationLogic extends GetxController {
     }
   }
 
-  updateDefaultChecked(List<MemberUser>? list) {
+  void updateDefaultChecked(List<MemberUser>? list) {
     if (null != list) {
       final userIDList = list.map((e) => e.member.userID!).toList();
       if (userIDList.isNotEmpty) {

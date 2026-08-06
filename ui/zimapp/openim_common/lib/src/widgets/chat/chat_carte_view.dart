@@ -5,9 +5,9 @@ import 'package:openim_common/openim_common.dart';
 
 class ChatCarteView extends StatelessWidget {
   const ChatCarteView({
-    Key? key,
+    super.key,
     required this.cardElem,
-  }) : super(key: key);
+  });
   final CardElem cardElem;
 
   @override

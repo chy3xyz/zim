@@ -4,10 +4,10 @@ import 'package:openim_common/openim_common.dart';
 
 class DeleteCommentPopMenu extends StatefulWidget {
   const DeleteCommentPopMenu({
-    Key? key,
+    super.key,
     required this.child,
     this.onTap,
-  }) : super(key: key);
+  });
   final Widget child;
   final Function()? onTap;
 

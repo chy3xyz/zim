@@ -10,11 +10,11 @@ class ONavigator {
         'deptInfo': deptInfo,
       });
 
-  static startSearchOrganization() => Get.toNamed(ORoutes.searchOrganization);
+  static Future? startSearchOrganization() => Get.toNamed(ORoutes.searchOrganization);
 
-  static startSelectContactsFromOrganization() =>
+  static Future? startSelectContactsFromOrganization() =>
       Get.toNamed(ORoutes.selectContactsFromOrganization);
 
-  static startSelectContactsFromSearchOrganization() =>
+  static Future? startSelectContactsFromSearchOrganization() =>
       Get.toNamed(ORoutes.selectContactsFromSearchOrganization);
 }

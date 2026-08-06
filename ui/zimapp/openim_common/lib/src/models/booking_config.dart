@@ -1,4 +1,3 @@
-import 'define.dart';
 
 class BookingConfig {
   String name;

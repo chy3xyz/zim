@@ -33,7 +33,7 @@ mixin UpgradeManger {
     Get.back();
   }
 
-  getAppInfo() async {
+  Future<void> getAppInfo() async {
     packageInfo ??= await PackageInfo.fromPlatform();
   }
 
@@ -69,7 +69,7 @@ mixin UpgradeManger {
   }
 
   /// 自动检测更新
-  autoCheckVersionUpgrade() async {
+  Future<void> autoCheckVersionUpgrade() async {
     if (isShowUpgradeDialog || isNowIgnoreUpdate) return;
     await getAppInfo();
     upgradeInfoV2 = await Apis.checkUpgradeV2();
@@ -104,8 +104,12 @@ mixin UpgradeManger {
     final newParts = newVersion.split('.').map((e) => int.tryParse(e) ?? 0).toList();
     
     // Ensure both versions have at least 3 parts
-    while (currentParts.length < 3) currentParts.add(0);
-    while (newParts.length < 3) newParts.add(0);
+    while (currentParts.length < 3) {
+      currentParts.add(0);
+    }
+    while (newParts.length < 3) {
+      newParts.add(0);
+    }
     
     // Compare major.minor.patch
     for (int i = 0; i < 3; i++) {

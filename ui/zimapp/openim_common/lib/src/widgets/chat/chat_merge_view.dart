@@ -6,10 +6,10 @@ import 'package:openim_common/openim_common.dart';
 
 class ChatMergeMsgView extends StatelessWidget {
   const ChatMergeMsgView({
-    Key? key,
+    super.key,
     required this.title,
     required this.summaryList,
-  }) : super(key: key);
+  });
   final String title;
   final List<String> summaryList;
 

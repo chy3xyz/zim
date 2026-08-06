@@ -1,7 +1,6 @@
 
 import 'package:zim_sdk/zim_sdk.dart';
 
-import '../enum/relationship.dart';
 
 class UserManager {
   final dynamic _channel;

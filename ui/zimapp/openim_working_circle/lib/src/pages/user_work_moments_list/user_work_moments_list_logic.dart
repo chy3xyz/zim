@@ -7,7 +7,6 @@ import 'package:get/get.dart';
 import 'package:openim_common/openim_common.dart';
 
 import '../../../openim_working_circle.dart';
-import '../../w_apis.dart';
 
 class UserWorkMomentsListLogic extends GetxController {
   final scrollController = ScrollController();
@@ -52,7 +51,7 @@ class UserWorkMomentsListLogic extends GetxController {
   }
 
   /// {'opEvent': OpEvent.delete, 'data': moments}
-  _opEventListener(dynamic event) {
+  void _opEventListener(dynamic event) {
     // if (event is Map) {
     //   final opEvent = event['opEvent'];
     //   final data = event['data'];
@@ -81,14 +80,14 @@ class UserWorkMomentsListLogic extends GetxController {
         showNumber: pageSize,
       );
 
-  _queryWorkingCircleList() async {
+  Future<void> _queryWorkingCircleList() async {
     final result = await _request(pageNo = 1);
     final list = result.workMoments ?? [];
     hasMore.value = list.isNotEmpty && list.length == pageSize;
     workMoments.assignAll(list);
   }
 
-  _loadMore() async {
+  Future<void> _loadMore() async {
     try {
       final result = await _request(++pageNo);
       final list = result.workMoments ?? [];
@@ -99,7 +98,7 @@ class UserWorkMomentsListLogic extends GetxController {
     }
   }
 
-  viewUserProfile(WorkMoments moments) => bridge?.viewUserProfile(
+  dynamic viewUserProfile(WorkMoments moments) => bridge?.viewUserProfile(
         moments.userID!,
         moments.nickname,
         moments.faceURL,

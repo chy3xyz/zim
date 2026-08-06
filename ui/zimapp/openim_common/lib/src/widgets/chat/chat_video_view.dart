@@ -8,12 +8,12 @@ import 'package:path_provider/path_provider.dart';
 
 class ChatVideoView extends StatefulWidget {
   const ChatVideoView({
-    Key? key,
+    super.key,
     required this.message,
     required this.isISend,
     this.sendProgressStream,
     this.isSending = false,
-  }) : super(key: key);
+  });
   final bool isISend;
   final Stream<MsgStreamEv<int>>? sendProgressStream;
   final Message message;
@@ -77,7 +77,7 @@ class _ChatVideoViewState extends State<ChatVideoView> {
 
   bool? get isValidPath => _message.exMap['validPath_$_snapshotPath'];
 
-  _createThumbView() async {
+  Future<void> _createThumbView() async {
     if (widget.isISend &&
         (isValidPath == true || isValidPath == null && await _checkingPath())) {
       _child = ImageUtil.fileImage(

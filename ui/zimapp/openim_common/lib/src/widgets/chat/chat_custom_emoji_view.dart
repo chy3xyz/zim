@@ -73,12 +73,12 @@ import 'package:openim_common/openim_common.dart';
 
 class ChatCustomEmojiView extends StatelessWidget {
   const ChatCustomEmojiView({
-    Key? key,
+    super.key,
     this.index,
     this.data,
     this.heroTag,
     required this.isISend,
-  }) : super(key: key);
+  });
 
   /// 内置表情包，按位置显示
   final int? index;

@@ -1,4 +1,4 @@
-library openim_organization;
+library;
 
 export 'src/o_apis.dart';
 export 'src/o_urls.dart';

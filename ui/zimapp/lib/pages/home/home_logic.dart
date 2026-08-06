@@ -1,4 +1,3 @@
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:zim_sdk/zim_sdk.dart';
@@ -11,7 +10,6 @@ import 'package:rxdart/rxdart.dart';
 
 import '../../core/controller/app_controller.dart';
 import '../../core/controller/im_controller.dart';
-import '../../core/im_callback.dart';
 import '../../routes/app_navigator.dart';
 import '../../widgets/screen_lock_title.dart';
 
@@ -35,16 +33,16 @@ class HomeLogic extends SuperController {
 
   Function()? onScrollToUnreadMessage;
 
-  switchTab(index) {
+  void switchTab(index) {
     this.index.value = index;
   }
 
-  scrollToUnreadMessage() {
+  void scrollToUnreadMessage() {
     onScrollToUnreadMessage?.call();
   }
 
   /// 获取消息未读数
-  _getUnreadMsgCount() {
+  void _getUnreadMsgCount() {
     OpenIM.iMManager.conversationManager.getTotalUnreadMsgCount().then((count) {
       unreadMsgCount.value = int.tryParse(count) ?? 0;
       initLogic.showBadge(unreadMsgCount.value);
@@ -166,14 +164,14 @@ class HomeLogic extends SuperController {
     unhandledCount.value -= temp;
   }
 
-  _localAuth() async {
+  Future<void> _localAuth() async {
     final didAuthenticate = await IMUtils.checkingBiometric(auth);
     if (didAuthenticate) {
       Get.back();
     }
   }
 
-  _showLockScreenPwd() async {
+  Future<void> _showLockScreenPwd() async {
     if (_isShowScreenLock) return;
     _lockScreenPwd = DataSp.getLockScreenPassword();
     if (null != _lockScreenPwd) {

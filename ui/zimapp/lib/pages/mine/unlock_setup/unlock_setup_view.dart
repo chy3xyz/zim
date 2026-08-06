@@ -73,7 +73,7 @@ class UnlockSetupPage extends StatelessWidget {
             const Spacer(),
             CupertinoSwitch(
               value: switchOn,
-              activeColor: Styles.c_0089FF,
+              activeTrackColor: Styles.c_0089FF,
               onChanged: onChanged,
             ),
           ],

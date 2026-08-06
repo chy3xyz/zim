@@ -1,4 +1,3 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:zim_sdk/zim_sdk.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -11,6 +10,8 @@ import 'oa_notification_logic.dart';
 
 class OANotificationPage extends StatelessWidget {
   final logic = Get.find<OANotificationLogic>();
+
+  OANotificationPage({super.key});
 
   @override
   Widget build(BuildContext context) {

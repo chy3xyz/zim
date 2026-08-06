@@ -26,7 +26,7 @@ class SearchOrganizationLogic extends GetxController {
     super.onClose();
   }
 
-  _clearInput() {
+  void _clearInput() {
     final key = searchCtrl.text.trim();
     if (key.isEmpty) {
       memberList.clear();
@@ -48,6 +48,6 @@ class SearchOrganizationLogic extends GetxController {
     memberList.assignAll(result.members ?? []);
   }
 
-  viewDeptMemberInfo(DeptMemberInfo memberInfo) =>
+  dynamic viewDeptMemberInfo(DeptMemberInfo memberInfo) =>
       organizationLogic.viewDeptMemberInfo(memberInfo);
 }

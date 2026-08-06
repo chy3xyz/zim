@@ -36,7 +36,7 @@ class CreateGroupLogic extends GetxController {
     return name;
   }
 
-  completeCreation() async {
+  Future<void> completeCreation() async {
     if (allList.length > 2) {
       // convertMemberRole(UserInfo u) => GroupMemberRole(userID: u.userID);
       var info = await LoadingView.singleton.wrap(

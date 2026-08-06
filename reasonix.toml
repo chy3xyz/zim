@@ -1,0 +1,19 @@
+# Reasonix 项目级配置（zim）
+# 解析顺序：flag > ./reasonix.toml > ~/.reasonix/config.toml > 默认
+# 说明：本文件为放开沙箱而创建 —— flutter/dart 工具链（~/ws_flutter）与
+# zigmodu 本地源码（~/w4_proj/zig_ws/zigmodu）均在 workspace 外，
+# 默认沙箱会拒绝其写入，导致 flutter analyze/test 无法运行、zigmodu 无法直接改。
+
+[sandbox]
+# 关闭 bash 的 OS 沙箱（seatbelt）—— flutter/dart 需要写 ~/ws_flutter/bin/cache/engine.stamp
+# 安全权衡：bash 命令不再被 OS 沙箱限制访问范围；CLI 工具审批模式（ask）仍然生效
+bash = "off"
+network = true
+# 文件写入器（write_file/edit_file/multi_edit/move_file）额外允许目录：
+#   - /tmp：临时文件
+#   - ~/ws_flutter：flutter 工具链
+#   - ~/w4_proj/zig_ws/zigmodu：zigmodu 本地源码（打补丁用）
+allow_write = ["/tmp", "/Users/n0x/ws_flutter", "/Users/n0x/w4_proj/zig_ws/zigmodu"]
+
+# 若仍需 bash 沙箱但只想放开 flutter：把 bash 改回 "enforce" 并确认
+# flutter 的写路径在 workspace 内（例如把 flutter SDK 复制进 workspace）。

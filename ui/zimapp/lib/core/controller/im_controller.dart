@@ -211,7 +211,7 @@ class IMController extends GetxController with IMCallback {
     }
   }
 
-  _handleLoginRepeatError(e) async {
+  Future<void> _handleLoginRepeatError(e) async {
     if (e is PlatformException && (e.code == "13002" || e.code == '1507')) {
       await logout();
       await DataSp.removeLoginCertificate();

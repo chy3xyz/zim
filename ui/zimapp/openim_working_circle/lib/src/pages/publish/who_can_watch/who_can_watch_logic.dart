@@ -21,7 +21,7 @@ class WhoCanWatchLogic extends GetxController {
     super.onInit();
   }
 
-  selectPermission(int index) async {
+  Future<void> selectPermission(int index) async {
     permission.value = index;
     if (index == 2 || index == 3) {
       final result = await bridge?.selectContacts(
@@ -39,7 +39,7 @@ class WhoCanWatchLogic extends GetxController {
     }
   }
 
-  determine() {
+  void determine() {
     if (permission.value == 2 && checkedVisibleList.isEmpty ||
         permission.value == 3 && checkedInvisibleList.isEmpty) {
       IMViews.showToast(StrRes.selectContactsLimit);

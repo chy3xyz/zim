@@ -43,7 +43,7 @@ Rect _menuRect = Rect.zero;
 
 class CopyCustomPopupMenu extends StatefulWidget {
   const CopyCustomPopupMenu({
-    Key? key,
+    super.key,
     required this.child,
     required this.menuBuilder,
     required this.pressType,
@@ -58,7 +58,7 @@ class CopyCustomPopupMenu extends StatefulWidget {
     this.menuOnChange,
     this.enablePassEvent = true,
     this.onTap,
-  }) : super(key: key);
+  });
 
   final Widget child;
   final PressType pressType;
@@ -90,7 +90,7 @@ class _CustomPopupMenuState extends State<CopyCustomPopupMenu> {
   bool _canResponse = true;
   TapDownDetails? _tapDownDetails;
 
-  _showMenu() {
+  void _showMenu() {
     // Ensure renderBoxes are available
     if (_childBox == null || _parentBox == null || !mounted) return;
     
@@ -188,7 +188,7 @@ class _CustomPopupMenuState extends State<CopyCustomPopupMenu> {
     }
   }
 
-  _hideMenu() {
+  void _hideMenu() {
     if (_overlayEntry != null) {
       _overlayEntry?.remove();
       _overlayEntry = null;
@@ -201,7 +201,7 @@ class _CustomPopupMenuState extends State<CopyCustomPopupMenu> {
     }
   }
 
-  _updateView() {
+  void _updateView() {
     bool menuIsShowing = _controller?.menuIsShowing ?? false;
     widget.menuOnChange?.call(menuIsShowing);
     if (menuIsShowing) {

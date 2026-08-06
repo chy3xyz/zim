@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:zim_sdk/zim_sdk.dart';
 import 'package:openim_common/openim_common.dart';
 import 'package:openim_working_circle/src/w_urls.dart';

@@ -410,7 +410,7 @@ class _SubView extends StatelessWidget {
                       ),
                     if (content != null)
                       Text(
-                        title!,
+                        content!,
                         style: Styles.ts_8E9AB0_14sp,
                         maxLines: 3,
                         overflow: TextOverflow.ellipsis,

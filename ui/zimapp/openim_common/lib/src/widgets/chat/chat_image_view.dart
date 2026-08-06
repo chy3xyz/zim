@@ -11,8 +11,8 @@ class ThumbnailViewer extends StatefulWidget {
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
 
-  ThumbnailViewer(
-      {this.thumbnailUrl,
+  const ThumbnailViewer(
+      {super.key, this.thumbnailUrl,
       this.imageUrl,
       this.thumbnailFile,
       this.imageFile,

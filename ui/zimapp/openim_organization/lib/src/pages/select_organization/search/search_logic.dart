@@ -27,7 +27,7 @@ class SelectContactsFromSearchOrganizationLogic extends GetxController {
     super.onClose();
   }
 
-  _clearInput() {
+  void _clearInput() {
     final key = searchCtrl.text.trim();
     if (key.isEmpty) {
       memberList.clear();

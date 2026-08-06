@@ -1,4 +1,5 @@
 name: openim_common
+publish_to: none
 description: A new Flutter project.
 version: 0.0.1
 homepage:

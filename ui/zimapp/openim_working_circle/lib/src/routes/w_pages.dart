@@ -23,7 +23,7 @@ part 'w_routes.dart';
 
 class WPages {
   /// 左滑关闭页面用于android
-  static _pageBuilder({
+  static GetPage _pageBuilder({
     required String name,
     required GetPageBuilder page,
     Bindings? binding,

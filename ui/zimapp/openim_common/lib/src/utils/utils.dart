@@ -33,7 +33,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sprintf/sprintf.dart';
 import 'package:uri_to_file/uri_to_file.dart';
 import 'package:intl/intl.dart' hide TextDirection;
-import 'package:flutter/foundation.dart';
 import 'package:video_compress/video_compress.dart';
 
 import '../widgets/chat/chat_preview_merge_message.dart';
@@ -148,7 +147,7 @@ class IMUtils {
     return info;
   }
 
-  static saveMediaToGallery(String mimeType, String cachePath) async {
+  static Future<void> saveMediaToGallery(String mimeType, String cachePath) async {
     if (mimeType.contains('video') || mimeType.contains('image')) {
       await ImageGallerySaverPlus.saveFile(cachePath);
     }
@@ -1464,7 +1463,7 @@ class IMUtils {
     }
   }
 
-  static openFileByOtherApp(String path) async {
+  static Future<void> openFileByOtherApp(String path) async {
     OpenResult result = await OpenFilex.open(path);
     if (result.type == ResultType.noAppToOpen) {
       IMViews.showToast("没有可支持的应用");
@@ -1748,7 +1747,7 @@ class IMUtils {
     return null;
   }
 
-  static convertCheckedListToMap(List<dynamic>? checkedList) {
+  static Map<String, dynamic>? convertCheckedListToMap(List<dynamic>? checkedList) {
     if (null == checkedList) return null;
     final checkedMap = <String, dynamic>{};
     for (var item in checkedList) {

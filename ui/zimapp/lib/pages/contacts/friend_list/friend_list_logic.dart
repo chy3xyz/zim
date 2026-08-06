@@ -42,7 +42,7 @@ class FriendListLogic extends GetxController {
     super.onClose();
   }
 
-  _getFriendList() async {
+  Future<void> _getFriendList() async {
     List<FriendInfo> list = [];
     for (int i = 0;; i++) {
       final temp = await OpenIM.iMManager.friendshipManager.getFriendListPage(
@@ -73,19 +73,19 @@ class FriendListLogic extends GetxController {
 
   void onUserIDList(List<String> userIDList) {}
 
-  _addFriend(dynamic user) {
+  void _addFriend(dynamic user) {
     if (user is FriendInfo || user is BlacklistInfo) {
       _addUser(user.toJson());
     }
   }
 
-  _delFriend(dynamic user) {
+  void _delFriend(dynamic user) {
     if (user is FriendInfo || user is BlacklistInfo) {
       friendList.removeWhere((e) => e.userID == user.userID);
     }
   }
 
-  _friendInfoChanged(FriendInfo user) {
+  void _friendInfoChanged(FriendInfo user) {
     friendList.removeWhere((e) => e.userID == user.userID);
     _addUser(user.toJson());
   }

@@ -229,7 +229,7 @@ class UserProfilePanelPage extends StatelessWidget {
                   if (showSwitchButton)
                     CupertinoSwitch(
                       value: switchOn,
-                      activeColor: Styles.c_0089FF,
+                      activeTrackColor: Styles.c_0089FF,
                       onChanged: onChanged,
                     ),
                   if (null != value) value.toText..style = Styles.ts_0C1C33_17sp,

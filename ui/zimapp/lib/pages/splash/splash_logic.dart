@@ -47,7 +47,7 @@ class SplashLogic extends GetxController {
     super.onInit();
   }
 
-  _login() async {
+  Future<void> _login() async {
     try {
       Logger.print('---------login---------- userID: $userID, token: $token');
       await imLogic.login(userID!, token!);

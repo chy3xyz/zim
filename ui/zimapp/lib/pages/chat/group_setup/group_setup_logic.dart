@@ -165,14 +165,14 @@ class GroupSetupLogic extends GetxController {
     super.onClose();
   }
 
-  get _defaultGroupInfo => GroupInfo(
+  GroupInfo get _defaultGroupInfo => GroupInfo(
         groupID: conversationInfo.value.groupID!,
         groupName: conversationInfo.value.showName,
         faceURL: conversationInfo.value.faceURL,
         memberCount: 0,
       );
 
-  get _defaultMemberInfo => GroupMembersInfo(
+  GroupMembersInfo get _defaultMemberInfo => GroupMembersInfo(
         userID: OpenIM.iMManager.userID,
         nickname: OpenIM.iMManager.userInfo.nickname,
       );
@@ -211,7 +211,7 @@ class GroupSetupLogic extends GetxController {
     }
   }
 
-  getGroupMembers() async {
+  Future<void> getGroupMembers() async {
     var list = await OpenIM.iMManager.groupManager.getGroupMemberList(
       groupID: groupInfo.value.groupID,
       count: 10,
@@ -219,7 +219,7 @@ class GroupSetupLogic extends GetxController {
     memberList.assignAll(list);
   }
 
-  getGroupInfo() async {
+  Future<void> getGroupInfo() async {
     var list = await OpenIM.iMManager.groupManager.getGroupsInfo(
       groupIDList: [groupInfo.value.groupID],
     );
@@ -229,7 +229,7 @@ class GroupSetupLogic extends GetxController {
     }
   }
 
-  getMyGroupMemberInfo() async {
+  Future<void> getMyGroupMemberInfo() async {
     final list = await OpenIM.iMManager.groupManager.getGroupMembersInfo(
       groupID: groupInfo.value.groupID,
       userIDList: [OpenIM.iMManager.userID],
@@ -289,7 +289,7 @@ class GroupSetupLogic extends GetxController {
         faceUrl: faceUrl,
       );
 
-  _modifyGroupInfo({
+  Future _modifyGroupInfo({
     String? groupName,
     String? notification,
     String? introduction,
@@ -454,7 +454,7 @@ class GroupSetupLogic extends GetxController {
     }
   }
 
-  addMember() async {
+  Future<void> addMember() async {
     final result = await AppNavigator.startSelectContacts(
       action: SelAction.addMember,
       groupID: groupInfo.value.groupID,
@@ -477,7 +477,7 @@ class GroupSetupLogic extends GetxController {
     }
   }
 
-  removeMember() async {
+  Future<void> removeMember() async {
     final list = await AppNavigator.startGroupMemberList(
       groupInfo: groupInfo.value,
       opType: GroupMemberOpType.del,

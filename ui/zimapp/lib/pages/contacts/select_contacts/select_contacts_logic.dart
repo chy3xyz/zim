@@ -124,7 +124,7 @@ class SelectContactsLogic extends GetxController implements OrganizationMultiSel
   // action == SelAction.meeting;
 
   /// 最近会话
-  _queryConversationList() async {
+  Future<void> _queryConversationList() async {
     if (!hiddenConversations) {
       final cons = Get.find<ConversationLogic>().list;
 
@@ -246,26 +246,26 @@ class SelectContactsLogic extends GetxController implements OrganizationMultiSel
 
   String get checkedStrTips => checkedList.values.map(parseName).join('、');
 
-  viewSelectedContactsList() => Get.bottomSheet(
+  Future viewSelectedContactsList() => Get.bottomSheet(
         SelectedContactsListView(),
         isScrollControlled: true,
       );
 
-  selectFromMyFriend() async {
+  Future<void> selectFromMyFriend() async {
     final result = await AppNavigator.startSelectContactsFromFriends();
     if (null != result) {
       Get.back(result: result);
     }
   }
 
-  selectFromMyGroup() async {
+  Future<void> selectFromMyGroup() async {
     final result = await AppNavigator.startSelectContactsFromGroup();
     if (null != result) {
       Get.back(result: result);
     }
   }
 
-  selectFromOrganization() async {
+  Future<void> selectFromOrganization() async {
     final result = await ONavigator.startSelectContactsFromOrganization();
     if (null != result) {
       Get.back(result: result);
@@ -279,7 +279,7 @@ class SelectContactsLogic extends GetxController implements OrganizationMultiSel
     }
   }
 
-  selectTagGroup() async {
+  Future<void> selectTagGroup() async {
     final result = await await AppNavigator.startSelectContactsFromTag();
     if (null != result) {
       Get.back(result: result);
@@ -293,7 +293,7 @@ class SelectContactsLogic extends GetxController implements OrganizationMultiSel
     }
   }
 
-  confirmSelectedList() async {
+  Future<void> confirmSelectedList() async {
     if (action == SelAction.forward || action == SelAction.recommend) {
       final sure = await Get.dialog(ForwardHintDialog(
         title: ex ?? '',
@@ -311,7 +311,7 @@ class SelectContactsLogic extends GetxController implements OrganizationMultiSel
     }
   }
 
-  confirmSelectedItem(dynamic info) async {
+  Future<void> confirmSelectedItem(dynamic info) async {
     if (action == SelAction.carte) {
       final sure = await Get.dialog(CustomDialog(
         title: StrRes.sendCarteConfirmHint,

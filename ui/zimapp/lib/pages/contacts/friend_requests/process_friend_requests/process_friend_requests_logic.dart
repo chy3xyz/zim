@@ -37,7 +37,7 @@ class ProcessFriendRequestsLogic extends GetxController {
         .catchError((_) => IMViews.showToast(StrRes.rejectFailed));
   }
 
-  _addSuccessfully(_) async {
+  Future _addSuccessfully(_) async {
     IMViews.showToast(StrRes.addSuccessfully);
     // Refresh cache after successful acceptance
     await cache.refreshData();
@@ -47,7 +47,7 @@ class ProcessFriendRequestsLogic extends GetxController {
     return _;
   }
 
-  _rejectSuccessfully(_) async {
+  Future _rejectSuccessfully(_) async {
     IMViews.showToast(StrRes.rejectSuccessfully);
     // Refresh cache after successful rejection
     await cache.refreshData();

@@ -6,7 +6,6 @@ import 'package:zim_sdk/zim_sdk.dart';
 import 'package:get/get.dart';
 import 'package:openim_common/openim_common.dart';
 import 'package:openim_working_circle/openim_working_circle.dart';
-import 'package:openim_working_circle/src/w_apis.dart';
 import 'package:sprintf/sprintf.dart';
 import 'package:wechat_assets_picker/wechat_assets_picker.dart';
 import 'package:wechat_camera_picker/wechat_camera_picker.dart';
@@ -52,7 +51,7 @@ class PublishLogic extends GetxController {
     super.onInit();
   }
 
-  _initDeviceInfo() async {
+  Future<BaseDeviceInfo?>? _initDeviceInfo() async {
     if (null == deviceInfo) {
       final deviceInfoPlugin = DeviceInfoPlugin();
       deviceInfo = await deviceInfoPlugin.deviceInfo;
@@ -87,7 +86,7 @@ class PublishLogic extends GetxController {
         ),
       );
 
-  _selectAssetsFromAlbum() async {
+  Future<void> _selectAssetsFromAlbum() async {
     Permissions.storage(() async {
       final assets2 = assetsList;
       final count = maxAssetsCount - assetsList.length;
@@ -120,7 +119,7 @@ class PublishLogic extends GetxController {
     });
   }
 
-  _selectAssetsFromCamera() async {
+  Future<void> _selectAssetsFromCamera() async {
     Permissions.camera(() async {
       final AssetEntity? assetEntity = await CameraPicker.pickFromCamera(
         Get.context!,
@@ -144,16 +143,16 @@ class PublishLogic extends GetxController {
     });
   }
 
-  previewSelectedPicture(int index) => isPicture
+  Future? previewSelectedPicture(int index) => isPicture
       ? WNavigator.startPreviewSelectedPicture(currentIndex: index)
       : WNavigator.startPreviewSelectedVideo();
 
-  deleteAssets(int index) {
+  void deleteAssets(int index) {
     assetsList.removeAt(index);
   }
 
   /// 0/1/2/3, 公开/私密/部分可见/不给谁看
-  whoCanWatch() async {
+  Future<void> whoCanWatch() async {
     final result = await WNavigator.startWhoCanWatch(
       permission: permission.value,
       checkedList: watchList.value,
@@ -164,7 +163,7 @@ class PublishLogic extends GetxController {
     }
   }
 
-  remindWhoToWatch() async {
+  Future<void> remindWhoToWatch() async {
     final result =
         await contactsBridge?.selectContacts(1, checkedList: remindList);
     if (result is Map) {
@@ -208,7 +207,7 @@ class PublishLogic extends GetxController {
     return null;
   }
 
-  publish() async {
+  Future<void> publish() async {
     if (inputCtrl.text.trim().isEmpty) {
       focusNode.requestFocus();
       IMViews.showToast(StrRes.plsEnterDescription);

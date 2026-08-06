@@ -33,7 +33,7 @@ class UpgradeViewV2 extends StatefulWidget {
 
 class _UpgradeViewV2State extends State<UpgradeViewV2> {
   double _progress = 0.0;
-  bool _showProgress = false;
+  final bool _showProgress = false;
 
   @override
   void initState() {

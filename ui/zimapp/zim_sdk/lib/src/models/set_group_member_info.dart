@@ -24,7 +24,7 @@ class SetGroupMemberInfo {
         ex = json['ex'];
 
   Map<String, dynamic> toJson() {
-    final data = Map<String, dynamic>();
+    final data = <String, dynamic>{};
     data['groupID'] = groupID;
     data['userID'] = userID;
     data['roleLevel'] = roleLevel;

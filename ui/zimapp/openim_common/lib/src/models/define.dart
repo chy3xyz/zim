@@ -1,4 +1,3 @@
-import 'dart:io';
 
 import 'package:openim_common/openim_common.dart';
 
@@ -164,8 +163,6 @@ extension MxNLayoutViewTypeExt on MxNLayoutViewType {
         return 2;
       case MxNLayoutViewType.threeXthree:
         return 3;
-      default:
-        return 1;
     }
   }
 }

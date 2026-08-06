@@ -54,7 +54,7 @@ class ProcessGroupRequestsLogic extends GetxController {
           groupRequestsLogic.getApplicationList();
           Get.back(result: 1);
         })
-        .catchError(_parse);
+        .catchError((e) { _parse(e); return null; });
   }
 
   void reject() {
@@ -72,13 +72,13 @@ class ProcessGroupRequestsLogic extends GetxController {
           groupRequestsLogic.getApplicationList();
           Get.back(result: -1);
         })
-        .catchError(_parse)
+        .catchError((e) { _parse(e); return null; })
         .catchError((_) {
           IMViews.showToast(StrRes.rejectFailed);
         });
   }
 
-  _parse(e) {
+  void _parse(e) {
     if (e is PlatformException) {
       if (e.code == '${SDKErrorCode.groupApplicationHasBeenProcessed}') {
         IMViews.showToast(StrRes.groupRequestHandled);

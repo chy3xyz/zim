@@ -4,9 +4,9 @@ import 'package:openim_common/openim_common.dart';
 
 class ChatFacePreview extends StatelessWidget {
   const ChatFacePreview({
-    Key? key,
+    super.key,
     required this.url,
-  }) : super(key: key);
+  });
   final String url;
 
   @override

@@ -4,7 +4,6 @@ import 'package:get/get.dart';
 import 'package:openim_common/openim_common.dart';
 
 import '../../../openim_working_circle.dart';
-import '../../w_apis.dart';
 import '../work_moments_list/preview_picture/preview_picture_view.dart';
 import '../work_moments_list/preview_video/preview_video_view.dart';
 import '../work_moments_list/work_moments_list_logic.dart';
@@ -34,7 +33,7 @@ class WorkMomentsDetailLogic extends GetxController {
 
   String get workMomentID => workMoments.value.workMomentID!;
 
-  _updateData() async {
+  Future<void> _updateData() async {
     final detail = await WApis.getMomentsDetail(
       workMomentID: workMomentID,
     );
@@ -58,13 +57,13 @@ class WorkMomentsDetailLogic extends GetxController {
     });
   }
 
-  showLikeCommentPopMenu(String workMomentID) {
+  void showLikeCommentPopMenu(String workMomentID) {
     popMenuID.value = workMomentID;
   }
 
-  hiddenLikeCommentPopMenu() => showLikeCommentPopMenu("");
+  dynamic hiddenLikeCommentPopMenu() => showLikeCommentPopMenu("");
 
-  popMenuPositionCallback(Offset position, Size size) {
+  void popMenuPositionCallback(Offset position, Size size) {
     popMenuPosition = position;
     popMenuSize = size;
   }
@@ -75,14 +74,14 @@ class WorkMomentsDetailLogic extends GetxController {
       null;
 
   /// 点赞/取消点赞 朋友圈
-  likeMoments() async {
+  Future<void> likeMoments() async {
     hiddenLikeCommentPopMenu();
     await WApis.likeMoments(workMomentID: workMomentID, like: !iIsLiked());
     await _updateData();
   }
 
   /// 提交评论
-  submitComment() async {
+  Future<void> submitComment() async {
     final text = inputCtrl.text.trim();
     if (text.isNotEmpty) {
       await WApis.commentMoments(
@@ -96,14 +95,14 @@ class WorkMomentsDetailLogic extends GetxController {
   }
 
   /// 评论朋友圈
-  commentMoments() async {
+  Future<void> commentMoments() async {
     hiddenLikeCommentPopMenu();
     commentHintText.value = '${StrRes.comment}：';
     replyUserID = null;
   }
 
   /// 回复评论
-  replyComment(Comments comments) async {
+  Future<void> replyComment(Comments comments) async {
     hiddenLikeCommentPopMenu();
     if (comments.userID == OpenIM.iMManager.userID) {
       final del = await Get.bottomSheet(
@@ -119,25 +118,25 @@ class WorkMomentsDetailLogic extends GetxController {
   }
 
   /// 删除评论
-  delComment(Comments comments) async {
+  Future<void> delComment(Comments comments) async {
     await WApis.deleteComment(
         workMomentID: workMomentID, commentID: comments.commentID!);
     await _updateData();
   }
 
-  delWorkWorkMoments(WorkMoments moments) async {
+  Future<void> delWorkWorkMoments(WorkMoments moments) async {
     await WApis.deleteMoments(workMomentID: moments.workMomentID!);
     wcBridge?.opEventSub.add({'opEvent': OpEvent.delete, 'data': moments});
     Get.back(result: true);
   }
 
-  cancelComment() {
+  void cancelComment() {
     commentHintText.value = '';
     replyUserID = null;
     inputCtrl.clear();
   }
 
-  previewPicture(int index, List<Metas> metas) {
+  void previewPicture(int index, List<Metas> metas) {
     navigator?.push(TransparentRoute(
       builder: (BuildContext context) => GestureDetector(
         onTap: () => Get.back(),
@@ -150,7 +149,7 @@ class WorkMomentsDetailLogic extends GetxController {
     ));
   }
 
-  previewVideo(String url, String? coverUrl) {
+  void previewVideo(String url, String? coverUrl) {
     navigator?.push(TransparentRoute(
       builder: (BuildContext context) => PreviewVideoPage(
         heroTag: url,
@@ -161,7 +160,7 @@ class WorkMomentsDetailLogic extends GetxController {
   }
 
   /// 0：公开 1: 仅自己可见 2：部分可见 3：不给谁看
-  previewWhoCanWatchList(WorkMoments moments) {
+  void previewWhoCanWatchList(WorkMoments moments) {
     if (moments.permission == 2 || moments.permission == 3) {
       WNavigator.startVisibleUsersList(workMoments: moments);
     }

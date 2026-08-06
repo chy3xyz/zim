@@ -5,12 +5,12 @@ import 'package:openim_common/openim_common.dart';
 
 class WrapAzListView<T extends ISuspensionBean> extends StatelessWidget {
   const WrapAzListView({
-    Key? key,
+    super.key,
     // this.itemScrollController,
     required this.data,
     required this.itemCount,
     required this.itemBuilder,
-  }) : super(key: key);
+  });
 
   /// Controller for jumping or scrolling to an item.
   // final ItemScrollController? itemScrollController;

@@ -10,7 +10,7 @@ class AppThemes {
   static ThemeData get lightTheme => ThemeData.light().copyWith(
         scaffoldBackgroundColor: Colors.grey.shade50,
         canvasColor: Colors.white,
-        appBarTheme: const AppBarTheme(color: Colors.white),
+        appBarTheme: const AppBarTheme(backgroundColor: Colors.white),
         bottomNavigationBarTheme: const BottomNavigationBarThemeData(
           backgroundColor: Colors.white,
           selectedItemColor: Color(0xFF0089FF),
@@ -76,7 +76,7 @@ class AppThemes {
   static ThemeData get darkTheme => ThemeData.dark().copyWith(
         scaffoldBackgroundColor: const Color(0xFF121212),
         canvasColor: const Color(0xFF1E1E1E),
-        appBarTheme: const AppBarTheme(color: Color(0xFF1E1E1E)),
+        appBarTheme: const AppBarTheme(backgroundColor: Color(0xFF1E1E1E)),
         bottomNavigationBarTheme: const BottomNavigationBarThemeData(
           backgroundColor: Color(0xFF1E1E1E),
           selectedItemColor: Color(0xFF0089FF),

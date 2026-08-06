@@ -1401,7 +1401,7 @@ class ChatLogic extends SuperController {
   /// 打开地图
   void onTapLocation() async {
     var location = await Get.to(
-      const ChatWebViewMap(host: Config.locationHost, webKey: Config.webKey, webServerKey: Config.webServerKey),
+      ChatWebViewMap(host: Config.locationHost, webKey: Config.webKey, webServerKey: Config.webServerKey),
       transition: Transition.cupertino,
       popGesture: true,
     );

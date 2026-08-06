@@ -4,11 +4,11 @@ import 'package:openim_common/openim_common.dart';
 
 class MetasImageView extends StatelessWidget {
   const MetasImageView({
-    Key? key,
+    super.key,
     required this.urls,
     this.width,
     this.height,
-  }) : super(key: key);
+  });
   final List<String> urls;
   final double? width;
   final double? height;

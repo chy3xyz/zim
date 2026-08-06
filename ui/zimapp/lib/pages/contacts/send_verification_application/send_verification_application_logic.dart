@@ -32,7 +32,7 @@ class SendVerificationApplicationLogic extends GetxController {
     }
   }
 
-  _applyAddFriend() async {
+  Future<void> _applyAddFriend() async {
     try {
       await LoadingView.singleton.wrap(
         asyncFunction: () => OpenIM.iMManager.friendshipManager.addFriend(
@@ -54,7 +54,7 @@ class SendVerificationApplicationLogic extends GetxController {
   }
 
   /// By Invitation = 2 , Search = 3 , QRCode  = 4
-  _applyEnterGroup() {
+  void _applyEnterGroup() {
     LoadingView.singleton
         .wrap(
           asyncFunction: () => OpenIM.iMManager.groupManager.joinGroup(

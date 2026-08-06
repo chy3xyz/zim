@@ -94,7 +94,7 @@ class FriendSetupPage extends StatelessWidget {
                           CupertinoSwitch(
                             value: switchOn,
                             onChanged: onChanged,
-                            activeColor: Styles.c_0089FF,
+                            activeTrackColor: Styles.c_0089FF,
                           ),
                       ],
                     ),

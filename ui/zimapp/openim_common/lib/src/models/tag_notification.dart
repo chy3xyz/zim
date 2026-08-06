@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:zim_sdk/zim_sdk.dart';
-import 'package:openim_common/openim_common.dart' hide UserInfo;
+import 'package:openim_common/openim_common.dart';
 
 class TagNotification {
   String? id;

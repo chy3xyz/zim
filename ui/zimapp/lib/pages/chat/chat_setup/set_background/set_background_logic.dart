@@ -63,7 +63,7 @@ class SetBackgroundImageLogic extends GetxController {
     }
   }
 
-  recover() {
+  void recover() {
     chatLogic.clearBackground();
     Get.back();
   }

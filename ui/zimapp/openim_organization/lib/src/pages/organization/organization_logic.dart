@@ -59,7 +59,7 @@ class OrganizationLogic extends GetxController {
     }
   }
 
-  viewDeptMemberInfo(DeptMemberInfo memberInfo) =>
+  dynamic viewDeptMemberInfo(DeptMemberInfo memberInfo) =>
       PackageBridge.viewUserProfileBridge!.viewUserProfile(
         memberInfo.userID!,
         memberInfo.nickname,

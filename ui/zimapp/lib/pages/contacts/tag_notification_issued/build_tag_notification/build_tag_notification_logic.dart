@@ -22,7 +22,7 @@ class BuildTagNotificationLogic extends GetxController {
     super.onClose();
   }
 
-  selectIssuedMember() async {
+  Future<void> selectIssuedMember() async {
     final result = await AppNavigator.startSelectContacts(
       action: SelAction.notificationIssued,
       checkedList: list.value,
@@ -33,7 +33,7 @@ class BuildTagNotificationLogic extends GetxController {
     }
   }
 
-  removeIssuedMember(info) {
+  void removeIssuedMember(info) {
     list.remove(info);
     enabled.value = list.isNotEmpty;
   }
@@ -57,7 +57,7 @@ class BuildTagNotificationLogic extends GetxController {
     Get.back(result: true);
   }
 
-  sendSoundNotification(int sec, String path) async {
+  Future<void> sendSoundNotification(int sec, String path) async {
     await LoadingView.singleton.wrap(asyncFunction: () async {
       final result = await OpenIM.iMManager.uploadFile(
         id: const Uuid().v4(),

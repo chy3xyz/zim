@@ -5,7 +5,7 @@ import 'package:openim_common/openim_common.dart';
 
 class ChatPicturePreview extends StatelessWidget {
   ChatPicturePreview({
-    Key? key,
+    super.key,
     this.currentIndex = 0,
     this.images = const [],
     this.heroTag,
@@ -13,15 +13,14 @@ class ChatPicturePreview extends StatelessWidget {
     this.onLongPress,
   })  : controller = images.length > 1
             ? ExtendedPageController(initialPage: currentIndex, pageSpacing: 50)
-            : null,
-        super(key: key);
+            : null;
   final int currentIndex;
   final List<MediaSource> images;
   final String? heroTag;
   final Function()? onTap;
   final Function(String url)? onLongPress;
   final ExtendedPageController? controller;
-  GlobalKey<ExtendedImageSlidePageState> slidePagekey =
+  final GlobalKey<ExtendedImageSlidePageState> slidePagekey =
       GlobalKey<ExtendedImageSlidePageState>();
   @override
   Widget build(BuildContext context) {
@@ -126,12 +125,12 @@ class ChatPicturePreview extends StatelessWidget {
 
 class MetaHero extends StatelessWidget {
   const MetaHero({
-    Key? key,
+    super.key,
     required this.heroTag,
     required this.child,
     this.onTap,
     this.onLongPress,
-  }) : super(key: key);
+  });
   final Widget child;
   final String? heroTag;
   final Function()? onTap;

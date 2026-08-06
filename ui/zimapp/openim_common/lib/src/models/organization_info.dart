@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:openim_common/src/models/user_full_info.dart';
 
 /// 组织信息
 class OrganizationInfo {
@@ -69,19 +68,19 @@ class OrganizationInfo {
   }
 
   Map<String, dynamic> toJson() {
-    final data = Map<String, dynamic>();
-    data['departmentID'] = this.departmentID;
-    data['logoURL'] = this.logoURL;
-    data['name'] = this.name;
-    data['parentID'] = this.parentID;
-    data['order'] = this.order;
-    data['departmentType'] = this.departmentType;
-    data['createTime'] = this.createTime;
-    data['subDepartmentNum'] = this.subDepartmentNum;
-    data['memberNum'] = this.memberNum;
-    data['ex'] = this.ex;
-    data['attachedInfo'] = this.attachedInfo;
-    data['relatedGroupID'] = this.relatedGroupID;
+    final data = <String, dynamic>{};
+    data['departmentID'] = departmentID;
+    data['logoURL'] = logoURL;
+    data['name'] = name;
+    data['parentID'] = parentID;
+    data['order'] = order;
+    data['departmentType'] = departmentType;
+    data['createTime'] = createTime;
+    data['subDepartmentNum'] = subDepartmentNum;
+    data['memberNum'] = memberNum;
+    data['ex'] = ex;
+    data['attachedInfo'] = attachedInfo;
+    data['relatedGroupID'] = relatedGroupID;
     return data;
   }
 
@@ -163,19 +162,19 @@ class DeptInfo {
   }
 
   Map<String, dynamic> toJson() {
-    final data = Map<String, dynamic>();
-    data['departmentID'] = this.departmentID;
-    data['faceURL'] = this.faceURL;
-    data['name'] = this.name;
-    data['parentID'] = this.parentID;
-    data['order'] = this.order;
-    data['departmentType'] = this.departmentType;
-    data['createTime'] = this.createTime;
-    data['subDepartmentNum'] = this.subDepartmentNum;
-    data['memberNum'] = this.memberNum;
-    data['ex'] = this.ex;
-    data['attachedInfo'] = this.attachedInfo;
-    data['relatedGroupID'] = this.relatedGroupID;
+    final data = <String, dynamic>{};
+    data['departmentID'] = departmentID;
+    data['faceURL'] = faceURL;
+    data['name'] = name;
+    data['parentID'] = parentID;
+    data['order'] = order;
+    data['departmentType'] = departmentType;
+    data['createTime'] = createTime;
+    data['subDepartmentNum'] = subDepartmentNum;
+    data['memberNum'] = memberNum;
+    data['ex'] = ex;
+    data['attachedInfo'] = attachedInfo;
+    data['relatedGroupID'] = relatedGroupID;
     return data;
   }
 
@@ -312,30 +311,30 @@ class DeptMemberInfo {
   }
 
   Map<String, dynamic> toJson() {
-    final Map<String, dynamic> data = new Map<String, dynamic>();
-    data['userID'] = this.userID;
-    data['nickname'] = this.nickname;
-    data['englishName'] = this.englishName;
-    data['faceURL'] = this.faceURL;
-    data['gender'] = this.gender;
-    data['mobile'] = this.mobile;
-    data['telephone'] = this.telephone;
-    data['birth'] = this.birth;
-    data['email'] = this.email;
-    data['departmentID'] = this.departmentID;
-    data['order'] = this.order;
-    data['position'] = this.position;
-    data['leader'] = this.leader;
-    data['status'] = this.status;
-    data['createTime'] = this.createTime;
-    data['ex'] = this.ex;
-    data['attachedInfo'] = this.attachedInfo;
-    data['departmentName'] = this.departmentName;
-    if (this.parentDepartmentList != null) {
+    final Map<String, dynamic> data = <String, dynamic>{};
+    data['userID'] = userID;
+    data['nickname'] = nickname;
+    data['englishName'] = englishName;
+    data['faceURL'] = faceURL;
+    data['gender'] = gender;
+    data['mobile'] = mobile;
+    data['telephone'] = telephone;
+    data['birth'] = birth;
+    data['email'] = email;
+    data['departmentID'] = departmentID;
+    data['order'] = order;
+    data['position'] = position;
+    data['leader'] = leader;
+    data['status'] = status;
+    data['createTime'] = createTime;
+    data['ex'] = ex;
+    data['attachedInfo'] = attachedInfo;
+    data['departmentName'] = departmentName;
+    if (parentDepartmentList != null) {
       data['parentDepartmentList'] =
-          this.parentDepartmentList!.map((v) => v.toJson()).toList();
+          parentDepartmentList!.map((v) => v.toJson()).toList();
     }
-    data['department'] = this.department?.toJson();
+    data['department'] = department?.toJson();
     return data;
   }
 
@@ -712,12 +711,12 @@ class OrganizationSearchResult {
   }
 
   Map<String, dynamic> toJson() {
-    final data = Map<String, dynamic>();
-    if (this.departments != null) {
-      data['departments'] = this.departments!.map((v) => v.toJson()).toList();
+    final data = <String, dynamic>{};
+    if (departments != null) {
+      data['departments'] = departments!.map((v) => v.toJson()).toList();
     }
-    if (this.members != null) {
-      data['members'] = this.members!.map((v) => v.toJson()).toList();
+    if (members != null) {
+      data['members'] = members!.map((v) => v.toJson()).toList();
     }
     return data;
   }

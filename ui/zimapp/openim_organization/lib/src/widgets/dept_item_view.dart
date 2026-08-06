@@ -57,10 +57,10 @@ enum DeptItemType {
 
 class DeptItemView extends StatelessWidget {
   const DeptItemView({
-    Key? key,
+    super.key,
     required this.type,
     this.userID,
-  }) : super(key: key);
+  });
   final DeptItemType type;
   final String? userID;
 
@@ -201,7 +201,7 @@ class DeptItemView extends StatelessWidget {
                             label: '${StrRes.department}/${StrRes.position}',
                             value: '${e.department?.name}/${e.position}',
                           ))
-                      .toList(),
+                      ,
                 ],
               ),
             )

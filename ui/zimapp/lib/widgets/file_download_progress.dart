@@ -6,7 +6,7 @@ import 'package:get/get.dart';
 import 'package:openim_common/openim_common.dart';
 
 class FileDownloadProgressView extends StatelessWidget {
-  FileDownloadProgressView(this.message, {Key? key}) : super(key: key);
+  FileDownloadProgressView(this.message, {super.key});
   final Message message;
   final logic = Get.find<DownloadController>();
 

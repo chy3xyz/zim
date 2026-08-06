@@ -98,7 +98,7 @@ typedef CustomChatListViewItemBuilder<T> = Widget Function(
 
 class CustomChatListView extends StatefulWidget {
   const CustomChatListView({
-    Key? key,
+    super.key,
     required this.itemBuilder,
     required this.controller,
     this.scrollController,
@@ -107,7 +107,7 @@ class CustomChatListView extends StatefulWidget {
     this.enabledBottomLoad = false,
     this.enabledTopLoad = false,
     this.indicatorColor,
-  }) : super(key: key);
+  });
 
   /// index: topList/bottomList的下标
   /// position: 整个列表的下标
@@ -262,7 +262,7 @@ class _CustomChatListViewState extends State<CustomChatListView> {
 
 class ChatListView extends StatefulWidget {
   const ChatListView({
-    Key? key,
+    super.key,
     this.physics,
     this.onTouch,
     this.itemCount,
@@ -273,7 +273,7 @@ class ChatListView extends StatefulWidget {
     this.onScrollToTopLoad,
     this.onScrollToBottom,
     this.onScrollToTop,
-  }) : super(key: key);
+  });
   final ScrollController? controller;
   final ScrollPhysics? physics;
   final int? itemCount;
@@ -318,7 +318,7 @@ class _ChatListViewState extends State<ChatListView> {
     super.initState();
   }
 
-  _scrollListener() {
+  void _scrollListener() {
     if (_isBottom) {
       Logger.print('-------------ChatListView scroll to bottom');
       _onScrollToBottomLoadMore();

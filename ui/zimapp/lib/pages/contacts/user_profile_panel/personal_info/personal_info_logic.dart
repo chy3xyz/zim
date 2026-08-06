@@ -91,13 +91,13 @@ class PersonalInfoLogic extends GetxController {
 
   String? get email => IMUtils.emptyStrToNull(userFullInfo.value.email) ?? '-';
 
-  clickPhoneNumber() => _callSystemPhone(userFullInfo.value.phoneNumber);
+  dynamic clickPhoneNumber() => _callSystemPhone(userFullInfo.value.phoneNumber);
 
-  clickTel() => _callSystemPhone(userFullInfo.value.telephone);
+  dynamic clickTel() => _callSystemPhone(userFullInfo.value.telephone);
 
-  clickEmail() => _callSystemEmail(userFullInfo.value.email);
+  dynamic clickEmail() => _callSystemEmail(userFullInfo.value.email);
 
-  _callSystemPhone(String? phone) async {
+  Future<void> _callSystemPhone(String? phone) async {
     final value = IMUtils.emptyStrToNull(phone);
     if (null != value) {
       final uri = Uri.parse('tel:$value');
@@ -107,7 +107,7 @@ class PersonalInfoLogic extends GetxController {
     }
   }
 
-  _callSystemEmail(String? email) {
+  void _callSystemEmail(String? email) {
     final value = IMUtils.emptyStrToNull(email);
     if (null != value) {
       final uri = Uri.parse('mailto:$value');

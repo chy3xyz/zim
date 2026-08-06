@@ -3,8 +3,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:openim_common/openim_common.dart';
 
 class ChatMultiSelToolbox extends StatelessWidget {
-  const ChatMultiSelToolbox({Key? key, this.onDelete, this.onMergeForward})
-      : super(key: key);
+  const ChatMultiSelToolbox({super.key, this.onDelete, this.onMergeForward});
   final Function()? onDelete;
   final Function()? onMergeForward;
 

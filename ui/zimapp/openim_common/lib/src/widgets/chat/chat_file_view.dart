@@ -5,13 +5,13 @@ import 'package:openim_common/openim_common.dart';
 
 class ChatFileView extends StatelessWidget {
   const ChatFileView({
-    Key? key,
+    super.key,
     required this.message,
     required this.isISend,
     this.sendProgressStream,
     this.fileDownloadProgressView,
     this.sendStatusStream,
-  }) : super(key: key);
+  });
   final Message message;
   final Stream<MsgStreamEv<int>>? sendProgressStream;
   final Stream<MsgStreamEv<bool>>? sendStatusStream;

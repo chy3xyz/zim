@@ -9,7 +9,7 @@ enum DialogType {
 
 class CustomDialog extends StatefulWidget {
   const CustomDialog({
-    Key? key,
+    super.key,
     this.title,
     this.url,
     this.content,
@@ -22,7 +22,7 @@ class CustomDialog extends StatefulWidget {
     this.initialCheckboxValue = false,
     this.onCheckboxChanged,
     this.alignment,
-  }) : super(key: key);
+  });
 
   final String? title;
   final String? url;

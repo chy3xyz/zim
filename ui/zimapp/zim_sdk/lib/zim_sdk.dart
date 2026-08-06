@@ -1,4 +1,4 @@
-library zim_sdk;
+library;
 
 export 'src/enum/conversation_type.dart';
 export 'src/enum/group_at_type.dart';

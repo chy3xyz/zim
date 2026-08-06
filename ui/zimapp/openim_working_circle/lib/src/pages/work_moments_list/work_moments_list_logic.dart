@@ -5,7 +5,6 @@ import 'package:zim_sdk/zim_sdk.dart';
 import 'package:get/get.dart';
 import 'package:openim_common/openim_common.dart';
 import 'package:openim_working_circle/openim_working_circle.dart';
-import 'package:openim_working_circle/src/w_apis.dart';
 import 'package:pull_to_refresh_new/pull_to_refresh.dart';
 
 import '../publish/publish_logic.dart';
@@ -201,7 +200,7 @@ class WorkMomentsListLogic extends GetxController {
   }
 
   /// {'opEvent': OpEvent.delete, 'data': moments}
-  _opEventListener(dynamic event) {
+  void _opEventListener(dynamic event) {
     if (event is Map) {
       final opEvent = event['opEvent'];
       final data = event['data'];
@@ -225,7 +224,7 @@ class WorkMomentsListLogic extends GetxController {
           showNumber: pageSize,
         );
 
-  queryWorkingCircleList() async {
+  Future<void> queryWorkingCircleList() async {
     try {
       final result = await _request(pageNo = 1);
       final list = result.workMoments ?? [];
@@ -240,7 +239,7 @@ class WorkMomentsListLogic extends GetxController {
     }
   }
 
-  loadMore() async {
+  Future<void> loadMore() async {
     try {
       final result = await _request(++pageNo);
       final list = result.workMoments ?? [];
@@ -263,7 +262,7 @@ class WorkMomentsListLogic extends GetxController {
       null;
 
   /// 点赞/取消点赞 朋友圈
-  likeMoments(WorkMoments moments) async {
+  Future<void> likeMoments(WorkMoments moments) async {
     hiddenLikeCommentPopMenu();
     final workMomentID = moments.workMomentID!;
     await WApis.likeMoments(
@@ -272,7 +271,7 @@ class WorkMomentsListLogic extends GetxController {
   }
 
   /// 提交评论
-  submitComment() async {
+  Future<void> submitComment() async {
     final text = inputCtrl.text.trim();
     if (text.isNotEmpty && null != commentWorkMomentsID) {
       await LoadingView.singleton.wrap(asyncFunction: () async {
@@ -289,7 +288,7 @@ class WorkMomentsListLogic extends GetxController {
   }
 
   /// 评论朋友圈
-  commentMoments(WorkMoments moments) async {
+  Future<void> commentMoments(WorkMoments moments) async {
     hiddenLikeCommentPopMenu();
     commentHintText.value = '${StrRes.comment}：';
     commentWorkMomentsID = moments.workMomentID!;
@@ -297,7 +296,7 @@ class WorkMomentsListLogic extends GetxController {
   }
 
   /// 回复评论
-  replyComment(WorkMoments moments, Comments comments) async {
+  Future<void> replyComment(WorkMoments moments, Comments comments) async {
     hiddenLikeCommentPopMenu();
     if (comments.userID == OpenIM.iMManager.userID) {
       final del = await Get.bottomSheet(
@@ -314,7 +313,7 @@ class WorkMomentsListLogic extends GetxController {
   }
 
   /// 删除评论
-  delComment(WorkMoments moments, Comments comments) async {
+  Future<void> delComment(WorkMoments moments, Comments comments) async {
     await WApis.deleteComment(
       workMomentID: moments.workMomentID!,
       commentID: comments.commentID!,
@@ -322,13 +321,13 @@ class WorkMomentsListLogic extends GetxController {
     await _updateData(moments.workMomentID!);
   }
 
-  delWorkWorkMoments(WorkMoments moments) async {
+  Future<void> delWorkWorkMoments(WorkMoments moments) async {
     await WApis.deleteMoments(workMomentID: moments.workMomentID!);
     workMoments.remove(moments);
     newMessageCount.value = await WApis.getUnreadCount();
   }
 
-  _updateData(String workMomentID) async {
+  Future<void> _updateData(String workMomentID) async {
     final detail = await WApis.getMomentsDetail(
       workMomentID: workMomentID,
     );
@@ -336,29 +335,29 @@ class WorkMomentsListLogic extends GetxController {
     workMoments.replaceRange(index, index + 1, [detail]);
   }
 
-  showLikeCommentPopMenu(String workMomentID) {
+  void showLikeCommentPopMenu(String workMomentID) {
     popMenuID.value = workMomentID;
   }
 
-  hiddenLikeCommentPopMenu() => showLikeCommentPopMenu("");
+  dynamic hiddenLikeCommentPopMenu() => showLikeCommentPopMenu("");
 
-  popMenuPositionCallback(Offset position, Size size) {
+  void popMenuPositionCallback(Offset position, Size size) {
     popMenuPosition = position;
     popMenuSize = size;
   }
 
-  cancelComment() {
+  void cancelComment() {
     commentHintText.value = '';
     commentWorkMomentsID = null;
     replyUserID = null;
     inputCtrl.clear();
   }
 
-  publish(int type) => WNavigator.startPublishWorkMoments(
+  Future? publish(int type) => WNavigator.startPublishWorkMoments(
         type: type == 0 ? PublishType.picture : PublishType.video,
       );
 
-  previewPicture(int index, List<Metas> metas) {
+  void previewPicture(int index, List<Metas> metas) {
     navigator?.push(TransparentRoute(
       builder: (BuildContext context) => GestureDetector(
         onTap: () => Get.back(),
@@ -371,7 +370,7 @@ class WorkMomentsListLogic extends GetxController {
     ));
   }
 
-  previewVideo(String url, String? coverUrl) {
+  void previewVideo(String url, String? coverUrl) {
     navigator?.push(TransparentRoute(
       builder: (BuildContext context) => PreviewVideoPage(
         heroTag: url,
@@ -382,25 +381,25 @@ class WorkMomentsListLogic extends GetxController {
   }
 
   /// 0：公开 1: 仅自己可见 2：部分可见 3：不给谁看
-  previewWhoCanWatchList(WorkMoments moments) {
+  void previewWhoCanWatchList(WorkMoments moments) {
     if (moments.permission == 2 || moments.permission == 3) {
       WNavigator.startVisibleUsersList(workMoments: moments);
     }
   }
 
-  seeNewMessage() async {
+  Future<void> seeNewMessage() async {
     await WNavigator.startLikeOrCommentMessage();
     WApis.clearUnreadCount(type: 1);
     newMessageCount.value = 0;
   }
 
-  viewUserProfile(WorkMoments moments) => _viewProfilePanel(
+  dynamic viewUserProfile(WorkMoments moments) => _viewProfilePanel(
         userID: moments.userID!,
         nickname: moments.nickname,
         faceURL: moments.faceURL,
       );
 
-  viewMyProfilePanel() => isMyself
+  dynamic viewMyProfilePanel() => isMyself
       ? _viewProfilePanel(
           userID: OpenIM.iMManager.userID,
           nickname: OpenIM.iMManager.userInfo.nickname,
@@ -408,14 +407,14 @@ class WorkMomentsListLogic extends GetxController {
         )
       : null;
 
-  _viewProfilePanel({
+  dynamic _viewProfilePanel({
     required String userID,
     String? nickname,
     String? faceURL,
   }) =>
       bridge?.viewUserProfile(userID, nickname, faceURL);
 
-  _recvNewMessage(WorkMomentsNotification notification) async {
+  Future<void> _recvNewMessage(WorkMomentsNotification notification) async {
     // newMessageCount.value = notification.unreadNum ?? 0;
     final newValue = notification.body;
     if (null != newValue) {

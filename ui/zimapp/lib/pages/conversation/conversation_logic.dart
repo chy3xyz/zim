@@ -607,13 +607,13 @@ class ConversationLogic extends GetxController with WidgetsBindingObserver {
     }
   }
 
-  scan() => AppNavigator.startScan();
+  dynamic scan() => AppNavigator.startScan();
 
-  addFriend() => AppNavigator.startAddContactsBySearch(searchType: SearchType.user);
+  dynamic addFriend() => AppNavigator.startAddContactsBySearch(searchType: SearchType.user);
 
-  createGroup() => AppNavigator.startCreateGroup(defaultCheckedList: [OpenIM.iMManager.userInfo]);
+  dynamic createGroup() => AppNavigator.startCreateGroup(defaultCheckedList: [OpenIM.iMManager.userInfo]);
 
-  addGroup() => AppNavigator.startAddContactsBySearch(searchType: SearchType.group);
+  dynamic addGroup() => AppNavigator.startAddContactsBySearch(searchType: SearchType.group);
 
   void videoMeeting() {}
 
@@ -699,7 +699,7 @@ class ConversationLogic extends GetxController with WidgetsBindingObserver {
       // Log every 10 triggers (more frequent for debugging)
       if (_stressTestCounter % 10 == 0) {
         Logger.print(
-            '[Stress Test] Triggered ${_stressTestCounter} times, generated ${fakeUpdates.length} conversations, pending: ${_pendingUpdates.length}, UI list: ${list.length}',
+            '[Stress Test] Triggered $_stressTestCounter times, generated ${fakeUpdates.length} conversations, pending: ${_pendingUpdates.length}, UI list: ${list.length}',
             onlyConsole: true);
       }
 
@@ -725,7 +725,7 @@ class ConversationLogic extends GetxController with WidgetsBindingObserver {
 
     isStressTestRunning.value = false;
 
-    Logger.print('[Stress Test] Stopped after ${_stressTestCounter} triggers (${_stressTestCounter ~/ 50} seconds)',
+    Logger.print('[Stress Test] Stopped after $_stressTestCounter triggers (${_stressTestCounter ~/ 50} seconds)',
         onlyConsole: true);
     _stressTestCounter = 0;
 

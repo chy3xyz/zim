@@ -88,7 +88,7 @@ class EditGroupAnnouncementLogic extends GetxController {
         me?.roleLevel == GroupRoleLevel.owner;
   }
 
-  editing() {
+  void editing() {
     onlyRead.value = false;
     Future.delayed(
         const Duration(milliseconds: 20), () => focusNode.requestFocus());

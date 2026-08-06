@@ -6,14 +6,14 @@ import 'package:sprintf/sprintf.dart';
 
 class ChatMeetingView extends StatelessWidget {
   const ChatMeetingView({
-    Key? key,
+    super.key,
     required this.inviterUserID,
     this.inviterNickname,
     required this.subject,
     required this.start,
     required this.duration,
     required this.id,
-  }) : super(key: key);
+  });
   final String inviterUserID;
   final String? inviterNickname;
   final String subject;

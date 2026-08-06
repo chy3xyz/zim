@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
-import 'package:get/get_core/src/get_main.dart';
 import 'package:openim_common/openim_common.dart';
 
 class MenuInfo {
@@ -25,11 +23,11 @@ class ChatLongPressMenu extends StatelessWidget {
   final bool adjustWidth;
 
   const ChatLongPressMenu({
-    Key? key,
+    super.key,
     required this.popupMenuController,
     required this.menus,
     this.adjustWidth = false,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -91,11 +89,10 @@ class ChatLongPressMenu extends StatelessWidget {
 
 class _MenuItemView extends StatelessWidget {
   const _MenuItemView({
-    Key? key,
     required this.icon,
     required this.label,
     this.labelStyle,
-  }) : super(key: key);
+  });
   final String? icon;
   final String label;
   final TextStyle? labelStyle;

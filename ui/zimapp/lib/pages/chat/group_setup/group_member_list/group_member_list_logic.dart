@@ -299,7 +299,7 @@ class GroupMemberListLogic extends GetxController {
     } else if (selectedMembers.length < maxSelectionCount) {
       selectedMembers.add(member);
     } else {
-      IMViews.showToast('Maximum ${maxSelectionCount} members can be selected');
+      IMViews.showToast('Maximum $maxSelectionCount members can be selected');
     }
   }
 

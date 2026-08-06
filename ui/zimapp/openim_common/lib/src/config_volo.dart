@@ -5,7 +5,6 @@ import 'package:zim_sdk/zim_sdk.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:openim_common/openim_common.dart';
-import 'package:openim_common/src/utils/api_service.dart';
 import 'package:path_provider/path_provider.dart';
 
 /// Config for Volo-OpenIM Backend

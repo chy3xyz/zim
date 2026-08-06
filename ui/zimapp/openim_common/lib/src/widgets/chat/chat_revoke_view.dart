@@ -8,11 +8,11 @@ import 'package:sprintf/sprintf.dart';
 
 class ChatRevokeView extends StatelessWidget {
   const ChatRevokeView({
-    Key? key,
+    super.key,
     required this.message,
     this.onReEdit,
     this.canReEdit = false,
-  }) : super(key: key);
+  });
   final Message message;
   final Function()? onReEdit;
   final bool canReEdit;

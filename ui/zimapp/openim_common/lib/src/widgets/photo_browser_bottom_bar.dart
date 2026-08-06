@@ -9,12 +9,12 @@ enum OperateType {
 }
 
 class PhotoBrowserBottomBar extends StatelessWidget {
-  PhotoBrowserBottomBar({super.key, this.onPressedButton, this.onlySave});
-  ValueChanged<OperateType>? onPressedButton;
-  bool? onlySave;
+  const PhotoBrowserBottomBar({super.key, this.onPressedButton, this.onlySave});
+  final ValueChanged<OperateType>? onPressedButton;
+  final bool? onlySave;
 
   PhotoBrowserBottomBar.show(BuildContext context,
-      {bool onlySave = false, ValueChanged<OperateType>? onPressedButton}) {
+      {super.key, this.onlySave = false, this.onPressedButton}) {
     showModalBottomSheet(
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
@@ -71,11 +71,10 @@ class PhotoBrowserBottomBar extends StatelessWidget {
                 minWidth: MediaQuery.of(context).size.width, maxHeight: 40.h),
             child: CupertinoButton(
                 padding: EdgeInsets.zero,
-                minSize: 40.h,
-                child: Text(StrRes.cancel, style: Styles.ts_0C1C33_12sp),
                 onPressed: () {
                   Navigator.of(context).pop();
-                }),
+                }, minimumSize: Size(40.h, 40.h),
+                child: Text(StrRes.cancel, style: Styles.ts_0C1C33_12sp)),
           )
         ],
       ),

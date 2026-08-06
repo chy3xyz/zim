@@ -7,10 +7,8 @@ import 'package:zim_sdk/zim_sdk.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:focus_detector_v2/focus_detector_v2.dart';
 import 'package:openim_common/openim_common.dart';
-import 'package:openim_common/src/widgets/chat/chat_quote_view.dart';
 import 'package:rxdart/rxdart.dart';
 
-import 'chat_markdown_text_view.dart';
 
 double maxWidth = 247.w;
 double pictureWidth = 120.w;

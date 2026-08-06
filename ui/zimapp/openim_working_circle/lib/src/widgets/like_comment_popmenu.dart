@@ -4,12 +4,12 @@ import 'package:openim_common/openim_common.dart';
 
 class LikeCommentPopMenu extends StatefulWidget {
   const LikeCommentPopMenu({
-    Key? key,
+    super.key,
     this.onPositionCallback,
     this.onTapLike,
     this.onTapComment,
     this.isLike = false,
-  }) : super(key: key);
+  });
   final Function(Offset position, Size size)? onPositionCallback;
   final Function()? onTapLike;
   final Function()? onTapComment;
@@ -75,7 +75,7 @@ class _PopMenuState extends State<LikeCommentPopMenu> {
     );
   }
 
-  _buildItemView(
+  GestureDetector _buildItemView(
     IconData icon,
     String label, {
     Function()? onTap,

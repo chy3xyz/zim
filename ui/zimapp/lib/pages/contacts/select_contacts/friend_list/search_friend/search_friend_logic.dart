@@ -26,14 +26,14 @@ class SelectContactsFromSearchFriendsLogic extends GetxController {
   bool get isSearchNotResult =>
       searchCtrl.text.trim().isNotEmpty && resultList.isEmpty;
 
-  _clearInput() {
+  void _clearInput() {
     final key = searchCtrl.text.trim();
     if (key.isEmpty) {
       resultList.clear();
     }
   }
 
-  search() {
+  void search() {
     var key = searchCtrl.text.trim();
     resultList.clear();
     if (key.isNotEmpty) {

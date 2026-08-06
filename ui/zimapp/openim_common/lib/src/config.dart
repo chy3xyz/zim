@@ -5,7 +5,6 @@ import 'package:zim_sdk/zim_sdk.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:openim_common/openim_common.dart';
-import 'package:openim_common/src/utils/api_service.dart';
 import 'package:path_provider/path_provider.dart';
 
 /// Config for Volo-OpenIM Backend
@@ -22,9 +21,9 @@ class Config {
   static const String defaultWebKey = '75a0da9ec836d573102999e99abf4650';
   /// Overridable at runtime (server config page) — avoids shipping the default
   /// OpenIM web key in production.
-  static String get webKey => DataSp.getString(DataSp.webKeyKey) ?? defaultWebKey;
+  static String get webKey => DataSp.getWebKey() ?? defaultWebKey;
   static const String defaultWebServerKey = '835638634b8f9b4bba386eeec94aa7df';
-  static String get webServerKey => DataSp.getString(DataSp.webServerKeyKey) ?? defaultWebServerKey;
+  static String get webServerKey => DataSp.getWebServerKey() ?? defaultWebServerKey;
   static const String locationHost = 'http://location.xxx.xx';
 
   static String get githubClientId => 'Ov23liElEK8rfHLPScaY';

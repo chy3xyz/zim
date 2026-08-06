@@ -144,10 +144,6 @@ class PreviewChatHistoryLogic extends GetxController {
 
   ValueKey itemKey(Message message) => ValueKey(message.clientMsgID!);
 
-  @override
-  void onClose() {
-    super.onClose();
-  }
 
   String? getShowTime(Message message) {
     if (message.exMap['showTime'] == true) {
@@ -214,14 +210,14 @@ mixin ListViewDataCtrl {
   final newMessageCount = 0.obs;
   int newMessageStartPosition = -1;
 
-  add(Message message, {bool scrollToBottom = false}) {
+  void add(Message message, {bool scrollToBottom = false}) {
     controller.update((val) {
       val?.insertToBottom(message);
     });
     _scrollToBottom(scroll: scrollToBottom, count: 1);
   }
 
-  addAll(List<Message> iterable, {bool scrollToBottom = false}) {
+  void addAll(List<Message> iterable, {bool scrollToBottom = false}) {
     controller.update((val) {
       // if (scrollToBottom) {
       //   if (iterable.length > 10) {
@@ -234,13 +230,13 @@ mixin ListViewDataCtrl {
     _scrollToBottom(scroll: scrollToBottom, count: iterable.length);
   }
 
-  insert(Message message) {
+  void insert(Message message) {
     controller.update((val) {
       val?.insertToTop(message);
     });
   }
 
-  insertAll(List<Message> iterable) {
+  void insertAll(List<Message> iterable) {
     controller.value.insertAllToTop(iterable);
   }
 
@@ -252,7 +248,7 @@ mixin ListViewDataCtrl {
     await scrollController.scrollToBottom(() {});
   }
 
-  _scrollToBottom({
+  void _scrollToBottom({
     bool scroll = false,
     int count = 0,
   }) {
@@ -269,7 +265,7 @@ mixin ListViewDataCtrl {
     }
   }
 
-  scrollToIndex() {
+  void scrollToIndex() {
     scrollController.scrollToIndex(
       newMessageStartPosition,
       duration: const Duration(milliseconds: 10),

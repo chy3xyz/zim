@@ -24,7 +24,7 @@ class TagNotificationIssuedLogic extends GetxController {
     super.onReady();
   }
 
-  queryNotificationLogs() async {
+  Future<void> queryNotificationLogs() async {
     List<TagNotification>? list;
     try {
       list = await Apis.getTagNotificationLog(
@@ -41,7 +41,7 @@ class TagNotificationIssuedLogic extends GetxController {
     }
   }
 
-  loadNotificationLogs() async {
+  Future<void> loadNotificationLogs() async {
     List<TagNotification>? list;
     try {
       list = await Apis.getTagNotificationLog(
@@ -91,7 +91,7 @@ class TagNotificationIssuedLogic extends GetxController {
     }
   }
 
-  delete(TagNotification ntf) async {
+  Future<void> delete(TagNotification ntf) async {
     final result = await Get.dialog(
       CustomDialog(title: StrRes.confirmDelTagNotificationHint),
     );

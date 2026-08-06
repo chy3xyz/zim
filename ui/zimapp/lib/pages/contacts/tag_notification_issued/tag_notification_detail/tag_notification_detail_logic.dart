@@ -27,9 +27,9 @@ class TagNotificationDetailLogic extends GetxController {
     super.onInit();
   }
 
-  playVoiceMessage() => logic.playVoiceMessage(notification);
+  void playVoiceMessage() => logic.playVoiceMessage(notification);
 
-  isPlaySound() => logic.isPlaySound(notification);
+  bool isPlaySound() => logic.isPlaySound(notification);
 
   @override
   void onClose() {

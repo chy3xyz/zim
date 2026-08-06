@@ -4,9 +4,9 @@ import 'package:sprintf/sprintf.dart';
 
 class ScreenLockTitle extends StatelessWidget {
   const ScreenLockTitle({
-    Key? key,
+    super.key,
     required this.stream,
-  }) : super(key: key);
+  });
 
   final Stream<String> stream;
 

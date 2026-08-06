@@ -32,7 +32,7 @@ class MatchTextView extends StatelessWidget {
 
   // final TextAlign textAlign;
   const MatchTextView(
-      {Key? key,
+      {super.key,
       required this.text,
       this.allAtMap = const <String, String>{},
       this.prefixSpan,
@@ -46,8 +46,7 @@ class MatchTextView extends StatelessWidget {
       this.model = TextModel.match,
       this.onVisibleTrulyText,
       this.isSupportCopy = false,
-      this.copyFocusNode})
-      : super(key: key);
+      this.copyFocusNode});
 
   @override
   Widget build(BuildContext context) {
@@ -77,11 +76,11 @@ class MatchTextView extends StatelessWidget {
         child: isSupportCopy ? SelectionArea(focusNode: copyFocusNode, child: text) : text);
   }
 
-  _normalModel(List<InlineSpan> children) {
+  void _normalModel(List<InlineSpan> children) {
     children.add(TextSpan(text: text, style: textStyle));
   }
 
-  _matchModel(List<InlineSpan> children) {
+  void _matchModel(List<InlineSpan> children) {
     final mappingMap = <String, MatchPattern>{};
 
     for (var e in patterns) {
@@ -174,7 +173,7 @@ class MatchTextView extends StatelessWidget {
     );
   }
 
-  _getUrl(String text, PatternType type) {
+  String _getUrl(String text, PatternType type) {
     switch (type) {
       case PatternType.url:
         return text.substring(0, 4) == 'http' ? text : 'http://$text';

@@ -10,13 +10,13 @@ class ChatVoiceView extends StatelessWidget {
   final bool isPlaying;
 
   const ChatVoiceView({
-    Key? key,
+    super.key,
     required this.isISend,
     this.soundPath,
     this.soundUrl,
     this.duration,
     this.isPlaying = false,
-  }) : super(key: key);
+  });
 
   Widget _buildVoiceAnimView() {
     return isISend

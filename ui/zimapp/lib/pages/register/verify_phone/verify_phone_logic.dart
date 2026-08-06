@@ -76,7 +76,7 @@ class VerifyPhoneLogic extends GetxController {
         usedFor: usedFor,
         invitationCode: invitationCode,
       );
-    } catch (e, s) {
+    } catch (e) {
       shake();
     }
   }

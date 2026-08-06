@@ -234,7 +234,7 @@ class UserProfilePanelLogic extends GetxController {
     }
   }
 
-  _queryGroupInfo() async {
+  Future<void> _queryGroupInfo() async {
     if (isGroupMemberPage) {
       var list = await OpenIM.iMManager.groupManager.getGroupsInfo(
         groupIDList: [groupID!],
@@ -248,7 +248,7 @@ class UserProfilePanelLogic extends GetxController {
   }
 
   /// 查询我与当前页面用户的群成员信息
-  _queryGroupMemberInfo() async {
+  Future<void> _queryGroupMemberInfo() async {
     if (isGroupMemberPage) {
       final list = await OpenIM.iMManager.groupManager.getGroupMembersInfo(
         groupID: groupID!,
@@ -282,7 +282,7 @@ class UserProfilePanelLogic extends GetxController {
     }
   }
 
-  _getJoinGroupMethod(GroupMembersInfo? other) async {
+  Future<void> _getJoinGroupMethod(GroupMembersInfo? other) async {
     // 入群方式 2：邀请加入 3：搜索加入 4：通过二维码加入
     if (other?.joinSource == 2) {
       if (other!.inviterUserID != null && other.inviterUserID != other.userID) {
@@ -304,7 +304,7 @@ class UserProfilePanelLogic extends GetxController {
   }
 
   /// 禁言时长
-  _calMuteTime(int time) {
+  void _calMuteTime(int time) {
     var date = DateUtil.formatDateMs(time, format: IMUtils.getTimeFormat2());
     var now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     var diff = time - now;

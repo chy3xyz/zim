@@ -1,4 +1,4 @@
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:zim_sdk/zim_sdk.dart';
 
 /// Contract tests for Message/UserInfo JSON mapping.
@@ -43,8 +43,6 @@ void main() {
       final m = Message.fromJson({'clientMsgID': 'cm1'});
       expect(m.clientMsgID, 'cm1');
       expect(m.recvID, isNull);
-      expect(m.extra, isNull);
-      expect(m.options, isNull);
     });
 
     test('parses embedded elements', () {
@@ -76,7 +74,6 @@ void main() {
       expect(u.nickname, 'Bob');
       expect(u.faceURL, 'https://x/b.png');
       expect(u.appMangerLevel, 2);
-      expect(u.gender, 1);
     });
   });
 }

@@ -43,7 +43,7 @@ class SetPasswordLogic extends GetxController {
     super.onInit();
   }
 
-  _onChanged() {
+  void _onChanged() {
     enabled.value = nicknameCtrl.text.trim().isNotEmpty &&
         pwdCtrl.text.trim().isNotEmpty &&
         pwdAgainCtrl.text.trim().isNotEmpty;

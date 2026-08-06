@@ -99,7 +99,7 @@ class FriendSetupLogic extends GetxController {
     }
   }
 
-  recommendToFriend() async {
+  Future<void> recommendToFriend() async {
     final isRegistered = Get.isRegistered<ChatLogic>(tag: GetTags.chat);
     if (isRegistered) {
       final logic = Get.find<ChatLogic>(tag: GetTags.chat);

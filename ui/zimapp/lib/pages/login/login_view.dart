@@ -91,7 +91,7 @@ class LoginPage extends StatelessWidget {
 
   /// Build tab view
   Widget _buildTabView() {
-    return Container(
+    return SizedBox(
       height: 222.h,
       width: 300.w,
       child: Column(

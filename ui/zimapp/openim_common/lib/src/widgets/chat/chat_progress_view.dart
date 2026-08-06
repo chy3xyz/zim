@@ -12,7 +12,7 @@ enum ProgressType {
 
 class ChatProgressView extends StatefulWidget {
   const ChatProgressView({
-    Key? key,
+    super.key,
     required this.isISend,
     required this.width,
     required this.height,
@@ -21,7 +21,7 @@ class ChatProgressView extends StatefulWidget {
     this.type = ProgressType.picture,
     this.isSending = false,
     this.initialProgress,
-  }) : super(key: key);
+  });
   final bool isISend;
   final double width;
   final double height;

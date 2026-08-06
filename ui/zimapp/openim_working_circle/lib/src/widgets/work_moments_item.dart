@@ -13,7 +13,7 @@ import 'like_comment_popmenu.dart';
 
 class WorkMomentsItem extends StatelessWidget {
   const WorkMomentsItem({
-    Key? key,
+    super.key,
     required this.moments,
     this.popMenuID = "",
     this.previewWhoCanWatchList,
@@ -28,7 +28,7 @@ class WorkMomentsItem extends StatelessWidget {
     this.previewPicture,
     this.showLikeCommentPopMenu,
     this.onTapAvatar,
-  }) : super(key: key);
+  });
   final WorkMoments moments;
   final String popMenuID;
   final Function(WorkMoments moments)? previewWhoCanWatchList;
@@ -224,7 +224,7 @@ class WorkMomentsItem extends StatelessWidget {
                           TextSpan(text: '、', style: Styles.ts_0C1C33_12sp),
                       ],
                     ))
-                .toList(),
+                ,
           ],
         ),
       );
@@ -232,8 +232,7 @@ class WorkMomentsItem extends StatelessWidget {
   Widget _buildCommentListView(String userID) {
     Widget buildItemView(Comments e) => CupertinoButton(
           padding: EdgeInsets.zero,
-          minSize: 20.h,
-          onPressed: () => replyComment?.call(moments, e),
+          onPressed: () => replyComment?.call(moments, e), minimumSize: Size(20.h, 20.h),
           child: Row(
             children: [
               Expanded(

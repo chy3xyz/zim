@@ -60,13 +60,13 @@ class ChatHistoryMultimediaPage extends StatelessWidget {
 
 class MultimediaItemWidget extends StatelessWidget {
   const MultimediaItemWidget({
-    Key? key,
+    super.key,
     required this.list,
     required this.label,
     required this.snapshotUrl,
     this.isVideo = false,
     this.onTap,
-  }) : super(key: key);
+  });
   final String label;
   final List<Message> list;
   final Function(Message message)? onTap;

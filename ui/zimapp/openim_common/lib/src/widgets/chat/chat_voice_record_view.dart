@@ -6,12 +6,12 @@ import 'package:record/record.dart';
 
 class ChatRecordVoiceView extends StatefulWidget {
   const ChatRecordVoiceView({
-    Key? key,
+    super.key,
     required this.builder,
     this.maxRecordSec = 60,
     this.onInterrupt,
     this.onCompleted,
-  }) : super(key: key);
+  });
   final int maxRecordSec;
   final Function()? onInterrupt;
   final Function(int sec, String path)? onCompleted;

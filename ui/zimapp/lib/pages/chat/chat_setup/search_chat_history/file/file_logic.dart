@@ -22,7 +22,7 @@ class ChatHistoryFileLogic extends GetxController {
     super.onReady();
   }
 
-  onRefresh() async {
+  Future<void> onRefresh() async {
     try {
       var result = await search(pageIndex = 1);
       if (result.totalCount == 0) {
@@ -39,7 +39,7 @@ class ChatHistoryFileLogic extends GetxController {
     }
   }
 
-  onLoad() async {
+  Future<void> onLoad() async {
     try {
       var result = await search(++pageIndex);
       if (result.totalCount! > 0) {

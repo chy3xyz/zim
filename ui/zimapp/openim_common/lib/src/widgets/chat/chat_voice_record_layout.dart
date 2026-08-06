@@ -11,14 +11,14 @@ typedef SpeakViewChildBuilder = Widget Function(ChatVoiceRecordBar recordBar);
 
 class ChatVoiceRecordLayout extends StatefulWidget {
   const ChatVoiceRecordLayout({
-    Key? key,
+    super.key,
     required this.builder,
     this.locale,
     this.onCompleted,
     this.speakTextStyle,
     this.speakBarColor,
     this.maxRecordSec = 60,
-  }) : super(key: key);
+  });
 
   final SpeakViewChildBuilder builder;
   final Locale? locale;

@@ -65,7 +65,7 @@ class GroupReadListPage extends StatelessWidget {
     );
   }
 
-  Widget _buildItemView(GroupMembersInfo info, {String? status}) => Container(
+  Widget _buildItemView(GroupMembersInfo info) => Container(
         height: 64.h,
         padding: EdgeInsets.symmetric(horizontal: 16.w),
         color: Styles.c_FFFFFF,

@@ -57,7 +57,7 @@ class IMViews {
         },
       );
 
-  static openIMCallSheet(
+  static Future openIMCallSheet(
     String label,
     Function(int index) onTapSheetItem,
   ) {
@@ -83,7 +83,7 @@ class IMViews {
     );
   }
 
-  static openIMGroupCallSheet(
+  static Future openIMGroupCallSheet(
     String groupID,
     Function(int index) onTapSheetItem,
   ) {

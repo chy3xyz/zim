@@ -348,9 +348,9 @@ class PictureElem {
 
   PictureElem.fromJson(Map<String, dynamic> json) {
     sourcePath = json['sourcePath'];
-    sourcePicture = json['sourcePicture'] != null ? new PictureInfo.fromJson(json['sourcePicture']) : null;
-    bigPicture = json['bigPicture'] != null ? new PictureInfo.fromJson(json['bigPicture']) : null;
-    snapshotPicture = json['snapshotPicture'] != null ? new PictureInfo.fromJson(json['snapshotPicture']) : null;
+    sourcePicture = json['sourcePicture'] != null ? PictureInfo.fromJson(json['sourcePicture']) : null;
+    bigPicture = json['bigPicture'] != null ? PictureInfo.fromJson(json['bigPicture']) : null;
+    snapshotPicture = json['snapshotPicture'] != null ? PictureInfo.fromJson(json['snapshotPicture']) : null;
   }
 
   Map<String, dynamic> toJson() {

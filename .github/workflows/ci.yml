@@ -72,3 +72,31 @@ jobs:
           done
           curl -sf http://localhost:10000/health >/dev/null || { cat /tmp/zim-ci.log; exit 1; }
           kill %1 || true
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui/zimapp
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.35.7
+
+      - name: Pub get (root + sub packages)
+        run: |
+          dart pub get
+          for p in openim_common openim_working_circle openim_organization zim_sdk; do
+            (cd $p && dart pub get)
+          done
+
+      - name: Analyze (must be zero errors)
+        run: dart analyze
+
+      - name: Test (zim_sdk protocol contract)
+        working-directory: ui/zimapp/zim_sdk
+        run: flutter test test/message_model_test.dart

@@ -71,12 +71,12 @@ extension StrExt on String {
 // ignore: must_be_immutable
 class LottieView extends StatelessWidget {
   LottieView({
-    Key? key,
+    super.key,
     required this.name,
     this.width,
     this.height,
     this.fit,
-  }) : super(key: key);
+  });
   final String name;
   double? width;
   double? height;
@@ -97,7 +97,7 @@ class LottieView extends StatelessWidget {
 // ignore: must_be_immutable
 class TextView extends StatelessWidget {
   TextView(
-      {Key? key,
+      {super.key,
       required this.data,
       this.style,
       this.textAlign,
@@ -105,8 +105,7 @@ class TextView extends StatelessWidget {
       this.textScaleFactor,
       this.maxLines,
       this.onTap,
-      this.wordEllipsis = true})
-      : super(key: key);
+      this.wordEllipsis = true});
   final String data;
   TextStyle? style;
   TextAlign? textAlign;
@@ -134,7 +133,7 @@ class TextView extends StatelessWidget {
 // ignore: must_be_immutable
 class ImageView extends StatelessWidget {
   ImageView({
-    Key? key,
+    super.key,
     required this.name,
     this.width,
     this.height,
@@ -143,7 +142,7 @@ class ImageView extends StatelessWidget {
     this.fit,
     this.onTap,
     this.onDoubleTap,
-  }) : super(key: key);
+  });
   final String name;
   double? width;
   double? height;
