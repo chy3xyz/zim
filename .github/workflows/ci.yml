@@ -37,7 +37,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: chy3xyz/zigmodu
-          ref: v0.15.12
+          ref: v0.15.22
           path: ../../zig_ws/zigmodu
 
       - name: Build
@@ -104,7 +104,7 @@ jobs:
       - name: Build backend for e2e integration test
         # The zim_sdk integration test talks to a real zim backend (HTTP+WS).
         run: |
-          cd ../../../zig_ws/zigmodu && git -c advice.detachedHead=false checkout v0.15.12
+          cd ../../../zig_ws/zigmodu && git -c advice.detachedHead=false checkout v0.15.22
           cd /Users/runner/work/zim/zim/src && zig build
           ./zig-out/bin/zim > /tmp/zim-e2e-ci.log 2>&1 &
           for i in $(seq 1 30); do

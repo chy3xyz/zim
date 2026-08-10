@@ -233,6 +233,13 @@ Edit `config/config.yaml`:
 - **CI**：frontend job 新增"构建后端 + 启动 + E2E 集成测试"门禁
 - 测试：zim_sdk 5 个（4 契约 + 1 集成）全过，analyze 0 error
 
+## Phase 75: zigmodu v0.15.16 → v0.15.22 适配
+
+- **升级**：v0.15.22（本地=远程同步）；变更：http AccessLogger/HttpMetrics 线程安全修复、sqlx libpq 超时/中断、outbox/audit/ai 新增 —— **API 面兼容**
+- **验证**：zig build 0 error、32/32 测试、CI 6/6 全绿（无代码适配）
+- **横幅**：main.zig Framework: zigmodu v0.15.22；CI zigmodu ref 更新 v0.15.22
+- **端到端**：v0.15.22 后端 + flutter zim_sdk 集成测试全过（数据打通持续验证）
+
 ## 遗留项（Phase 35 之后）
 
 - **gateway handler 已按域拆分**（Phase 49）：`gateway/handlers.zig` 4125 行拆为 298 行骨架 + `handlers/{helpers,auth,account,user,friend,group,message,conversation,encryption,office,organization,third,statistics,rtc,jssdk,health}.zig` 16 个域文件；新增 handler 遵循同结构

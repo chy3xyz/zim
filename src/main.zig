@@ -243,7 +243,7 @@ pub fn main(init: std.process.Init) !void {
     core.logInfo("========================================", .{});
     core.logInfo("  ZIM Server v0.4.0 (Modulith)", .{});
     core.logInfo("  OpenIM Server Rewrite in Zig", .{});
-    core.logInfo("  Framework: zigmodu v0.15.9", .{});
+    core.logInfo("  Framework: zigmodu v0.15.22", .{});
     core.logInfo("  Mode: Deep Integration (ThreadSafeEventBus + WorkerPool + RuntimeOptions)", .{});
     core.logInfo("========================================", .{});
 
