@@ -1,11 +1,11 @@
 const std = @import("std");
 const core = @import("core");
-const zigmodu = @import("zigmodu");
+const zmodu = @import("zmodu");
 const config_mod = @import("../config.zig");
 const persistence = @import("persistence.zig");
 const model = @import("model.zig");
 
-pub const info = zigmodu.api.Module{
+pub const info = zmodu.api.Module{
     .name = "db_postgres",
     .description = "PostgreSQL database module using libpq",
     .dependencies = &.{"config"},

@@ -1,29 +1,29 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const zigmodu = @import("zigmodu");
+const zmodu = @import("zmodu");
 
 // ============================================
 // ZIM Core Infrastructure Module
-// Deep integration with zigmodu Modulith ecosystem
+// Deep integration with zmodu Modulith ecosystem
 // Provides: Allocator, DI Container, EventBus, Logger, Validation
 // ============================================
 
 var g_initialized: bool = false;
 var g_allocator: std.mem.Allocator = undefined;
 var g_io: std.Io = undefined;
-var g_logger: ?zigmodu.observability.StructuredLogger = null;
+var g_logger: ?zmodu.observability.StructuredLogger = null;
 threadlocal var g_request_allocator: ?std.mem.Allocator = null;
 
 // --------------------------------------------
-// DI Container (zigmodu native)
+// DI Container (zmodu native)
 // --------------------------------------------
-var g_container: ?zigmodu.Container = null;
+var g_container: ?zmodu.Container = null;
 
 // --------------------------------------------
-// EventBus (backed by zigmodu ThreadSafeEventBus + WorkerPool)
+// EventBus (backed by zmodu ThreadSafeEventBus + WorkerPool)
 // The facade keeps the legacy EventBusService API so existing modules stay
 // unchanged, while dispatch is delegated to the framework's thread-safe bus.
-// Async subscriptions run on a zigmodu WorkerPool instead of the publishing
+// Async subscriptions run on a zmodu WorkerPool instead of the publishing
 // fiber (per-module QPS Phase 2 feature).
 // --------------------------------------------
 pub const EventType = enum {
@@ -70,14 +70,14 @@ const Subscription = struct {
     module_name: []const u8,
 };
 
-const Bus = zigmodu.ThreadSafeEventBus(Event);
+const Bus = zmodu.ThreadSafeEventBus(Event);
 
 var g_bus: ?Bus = null;
 var g_subscriptions: std.ArrayList(Subscription) = undefined;
 var g_subscriptions_init: bool = false;
 var g_async_subscriptions: std.ArrayList(Subscription) = undefined;
 var g_async_init: bool = false;
-var g_worker_pool: ?zigmodu.WorkerPool = null;
+var g_worker_pool: ?zmodu.WorkerPool = null;
 var g_published_total: std.atomic.Value(u64) = .init(0);
 
 fn subscriptionMatches(sub: Subscription, event: Event) bool {
@@ -124,7 +124,7 @@ pub const EventBusService = struct {
     }
 
     /// Async subscription — events are dispatched on the core WorkerPool
-    /// (zigmodu WorkerPool feature) instead of the publishing fiber.
+    /// (zmodu WorkerPool feature) instead of the publishing fiber.
     pub fn subscribeAsync(_: *EventBusService, event_type: EventType, handler: EventHandler, module_name: []const u8) !void {
         if (!g_async_init) {
             g_async_subscriptions = std.ArrayList(Subscription).empty;
@@ -136,7 +136,7 @@ pub const EventBusService = struct {
             .module_name = module_name,
         });
         if (g_worker_pool == null) {
-            g_worker_pool = try zigmodu.WorkerPool.init(g_allocator, g_io, "core-event-bus", 4, 1024);
+            g_worker_pool = try zmodu.WorkerPool.init(g_allocator, g_io, "core-event-bus", 4, 1024);
             try g_bus.?.subscribeAsync(&g_worker_pool.?, dispatchAsync);
         }
     }
@@ -155,7 +155,7 @@ pub const EventBusService = struct {
             .source_module = source_module,
             .target_module = null,
             .payload = payload_copy,
-            .timestamp = zigmodu.time.monotonicNowSeconds(),
+            .timestamp = zmodu.time.monotonicNowSeconds(),
         };
         g_event_bus_instance.publish(event);
     }
@@ -197,7 +197,7 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io) !void {
     g_allocator = allocator;
     g_io = io;
 
-    g_container = zigmodu.Container.init(allocator);
+    g_container = zmodu.Container.init(allocator);
 
     g_bus = Bus.init(allocator, io);
     try g_bus.?.subscribe(dispatchSync);
@@ -209,7 +209,7 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io) !void {
 
     // Structured JSON logger (stderr). Optional — created best-effort so the
     // test harness (std.testing.io) degrades gracefully.
-    g_logger = zigmodu.observability.StructuredLogger.init(allocator, io, .INFO, .stderr);
+    g_logger = zmodu.observability.StructuredLogger.init(allocator, io, .INFO, .stderr);
 
     logInfo("Core infrastructure initialized", .{});
 }
@@ -295,7 +295,7 @@ pub fn getIo() std.Io {
 }
 
 /// Structured JSON logger (stderr) — null when unavailable.
-pub fn getLogger() ?*zigmodu.observability.StructuredLogger {
+pub fn getLogger() ?*zmodu.observability.StructuredLogger {
     if (g_logger) |*l| return l;
     return null;
 }
@@ -304,7 +304,7 @@ pub fn getLogger() ?*zigmodu.observability.StructuredLogger {
 // Public API: DI Container
 // --------------------------------------------
 
-pub fn getContainer() *zigmodu.Container {
+pub fn getContainer() *zmodu.Container {
     return &g_container.?;
 }
 
@@ -325,12 +325,12 @@ pub fn getEventBus() *EventBusService {
 }
 
 // --------------------------------------------
-// Public API: Time (zigmodu.time + wall-clock helper)
+// Public API: Time (zmodu.time + wall-clock helper)
 // --------------------------------------------
 
-/// Monotonic seconds since an arbitrary epoch (zigmodu.time).
+/// Monotonic seconds since an arbitrary epoch (zmodu.time).
 pub fn monotonicNowSeconds() i64 {
-    return zigmodu.time.monotonicNowSeconds();
+    return zmodu.time.monotonicNowSeconds();
 }
 
 /// Wall-clock UNIX seconds — used for token expiry and verification codes.
@@ -366,10 +366,10 @@ pub fn secureRandomBytes(buf: []u8) void {
 }
 
 // --------------------------------------------
-// Public API: Metrics (zigmodu PrometheusMetrics)
+// Public API: Metrics (zmodu PrometheusMetrics)
 // --------------------------------------------
 
-const PrometheusMetrics = zigmodu.observability.PrometheusMetrics;
+const PrometheusMetrics = zmodu.observability.PrometheusMetrics;
 
 var g_metrics: ?PrometheusMetrics = null;
 var g_metric_http_reqs: ?*PrometheusMetrics.Counter = null;
@@ -449,26 +449,26 @@ pub fn deinitMetrics() void {
 // Public API: Application runtime (per-module isolation)
 // --------------------------------------------
 
-var g_app: ?*zigmodu.Application = null;
+var g_app: ?*zmodu.Application = null;
 
-pub fn setApp(app: *zigmodu.Application) void {
+pub fn setApp(app: *zmodu.Application) void {
     g_app = app;
 }
 
-pub fn getApp() ?*zigmodu.Application {
+pub fn getApp() ?*zmodu.Application {
     return g_app;
 }
 
 /// Access the per-module ModuleRuntime (bulkhead / rate limiter / circuit
-/// breaker / worker pool) provisioned by zigmodu from `info.runtime`.
-pub fn getModuleRuntime(name: []const u8) ?*zigmodu.ModuleRuntime {
+/// breaker / worker pool) provisioned by zmodu from `info.runtime`.
+pub fn getModuleRuntime(name: []const u8) ?*zmodu.ModuleRuntime {
     const app = g_app orelse return null;
     return app.getModuleRuntime(name);
 }
 
 // --------------------------------------------
 // Public API: Logger (convenience wrappers around std.log)
-// Modules use std.log scopes; zigmodu ships log/StructuredLogger.zig for
+// Modules use std.log scopes; zmodu ships log/StructuredLogger.zig for
 // JSON-formatted logging if a structured sink is needed later.
 // --------------------------------------------
 
@@ -532,7 +532,7 @@ fn rotateLogLocked() void {
 
 /// Structured JSON log line (std.log sink, thread-safe, no std.Io dependency).
 /// Callers pass the full field set, e.g. core.logJson(.{ .event = "x", .k = v }).
-/// Strings are serialized readably (unlike zigmodu StructuredLogger's `{any}`
+/// Strings are serialized readably (unlike zmodu StructuredLogger's `{any}`
 /// byte-array formatting until the `{s}` patch is applied).
 pub fn logJson(fields: anytype) void {
     const json = std.json.Stringify.valueAlloc(g_allocator, fields, .{}) catch return;

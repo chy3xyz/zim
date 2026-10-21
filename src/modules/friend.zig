@@ -1,13 +1,13 @@
 const std = @import("std");
 const core = @import("core");
-const zigmodu = @import("zigmodu");
+const zmodu = @import("zmodu");
 const db_mod = @import("db_postgres.zig");
 
 const model = @import("friend/model.zig");
 const persistence = @import("friend/persistence.zig");
 const service = @import("friend/service.zig");
 
-pub const info = zigmodu.api.Module{
+pub const info = zmodu.api.Module{
     .name = "friend",
     .description = "Friend relationships - requests, accept/decline, blacklist",
     .dependencies = &.{ "user", "db_postgres" },

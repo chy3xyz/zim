@@ -1,7 +1,74 @@
 const std = @import("std");
 const core = @import("core");
 const db_mod = @import("../../modules/db_postgres.zig");
+const zent = @import("zent");
+const zent_db = @import("../../zent_db.zig");
 const model = @import("model.zig");
+
+/// Full-row projection shared by get/getByOwner/getByOwnerSince — epoch
+/// columns aliased to the model field names so sql_scan maps by name.
+const CONV_SELECT = "SELECT id, owner_user_id, conversation_id, conversation_type, user_id, group_id, recv_msg_opt, is_pinned, is_private_chat, burn_duration, attached_info, ex, max_seq, min_seq, has_read_seq, latest_msg, latest_msg_send_time, latest_msg_send_id, latest_msg_content_type, group_at_type, EXTRACT(EPOCH FROM create_time)::bigint AS create_time, EXTRACT(EPOCH FROM update_time)::bigint AS update_time, is_msg_destruct, msg_destruct_time FROM conversations";
+
+/// sql_scan DTO for a full conversations row. `conversation_type` stays i16:
+/// the scanner zero-initializes DTO structs, and model.ConversationType has
+/// no tag 0 (comptime failure) — the enum is materialized in convRowToModel.
+/// Scanner-duplicated strings transfer into model.Conversation (same
+/// request-scoped lifetime contract as rowToConversation).
+const ConvRow = struct {
+    id: []const u8,
+    owner_user_id: []const u8,
+    conversation_id: []const u8,
+    conversation_type: i16,
+    user_id: []const u8,
+    group_id: []const u8,
+    recv_msg_opt: i16,
+    is_pinned: bool,
+    is_private_chat: bool,
+    burn_duration: i64,
+    attached_info: []const u8,
+    ex: []const u8,
+    max_seq: i64,
+    min_seq: i64,
+    has_read_seq: i64,
+    latest_msg: []const u8,
+    latest_msg_send_time: i64,
+    latest_msg_send_id: []const u8,
+    latest_msg_content_type: i16,
+    group_at_type: i16,
+    create_time: i64,
+    update_time: i64,
+    is_msg_destruct: bool,
+    msg_destruct_time: i64,
+};
+
+fn convRowToModel(row: ConvRow) model.Conversation {
+    return .{
+        .id = row.id,
+        .owner_user_id = row.owner_user_id,
+        .conversation_id = row.conversation_id,
+        .conversation_type = @fromBackingInt(@intCast(row.conversation_type)),
+        .user_id = row.user_id,
+        .group_id = row.group_id,
+        .recv_msg_opt = row.recv_msg_opt,
+        .is_pinned = row.is_pinned,
+        .is_private_chat = row.is_private_chat,
+        .burn_duration = @intCast(row.burn_duration),
+        .attached_info = row.attached_info,
+        .ex = row.ex,
+        .max_seq = row.max_seq,
+        .min_seq = row.min_seq,
+        .has_read_seq = row.has_read_seq,
+        .latest_msg = row.latest_msg,
+        .latest_msg_send_time = row.latest_msg_send_time,
+        .latest_msg_send_id = row.latest_msg_send_id,
+        .latest_msg_content_type = row.latest_msg_content_type,
+        .group_at_type = row.group_at_type,
+        .create_time = row.create_time,
+        .update_time = row.update_time,
+        .is_msg_destruct = row.is_msg_destruct,
+        .msg_destruct_time = row.msg_destruct_time,
+    };
+}
 
 fn rowToConversation(allocator: std.mem.Allocator, row: []const []const u8) !model.Conversation {
     return model.Conversation{
@@ -40,6 +107,25 @@ fn freeResult(allocator: std.mem.Allocator, result: db_mod.QueryResult) void {
     _ = allocator.free(result.rows);
 }
 
+/// RFC 4122 v4 UUID from the OS CSPRNG (random UUID) — conversations.id is
+/// DB-defaulted (`uuid_generate_v4()`) in the legacy branch, but the zent
+/// typed upsert requires a caller-provided text pk (zent v0.84+ policy).
+fn generateUuidV4(allocator: std.mem.Allocator) ![]const u8 {
+    var bytes: [16]u8 = undefined;
+    core.secureRandomBytes(&bytes);
+    bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
+    bytes[8] = (bytes[8] & 0x3f) | 0x80; // RFC 4122 variant
+    var hex: [32]u8 = undefined;
+    const charset = "0123456789abcdef";
+    for (bytes, 0..) |b, i| {
+        hex[i * 2] = charset[b >> 4];
+        hex[i * 2 + 1] = charset[b & 0x0f];
+    }
+    return std.fmt.allocPrint(allocator, "{s}-{s}-{s}-{s}-{s}", .{
+        hex[0..8], hex[8..12], hex[12..16], hex[16..20], hex[20..32],
+    });
+}
+
 fn generateAESKey(allocator: std.mem.Allocator) ![]const u8 {
     var key_bytes: [32]u8 = undefined;
     core.secureRandomBytes(&key_bytes);
@@ -63,8 +149,47 @@ pub const ConversationPersistence = struct {
     /// Upsert a conversation with the latest message info in one statement.
     /// `exec` may be a `*PostgresClient` or a `*Tx` (transactional message send).
     /// max_seq is monotonic (GREATEST) so out-of-order sends never regress it.
+    ///
+    /// zent path (preferred): typed `SaveOrUpdateOnWith` against the
+    /// UNIQUE (owner_user_id, conversation_id) business key — the GREATEST
+    /// monotonic columns ride the `{t:col}/{x:col}` upsert expression
+    /// templates (docs/zent-migration.md). Guarded by a comptime type check:
+    /// a legacy `*Tx` must stay on the legacy branch — the zent pool holds a
+    /// different connection, and mixing them would break the send
+    /// transaction's atomicity.
     pub fn upsertWithLatest(self: *ConversationPersistence, exec: anytype, owner_user_id: []const u8, conversation_id: []const u8, conversation_type: i16, user_id: []const u8, group_id: []const u8, latest_msg: []const u8, latest_send_time: i64, latest_send_id: []const u8, latest_content_type: i16, max_seq: i64, group_at_type: i16) !void {
-        _ = self;
+        if (zent_db.getClient() != null and @TypeOf(exec) == *db_mod.PostgresClient) {
+            const client = zent_db.getClient().?;
+            var b = try client.conversation.Create();
+            defer b.deinit();
+            // zent v0.84+ requires a caller-provided text pk; generate a v4
+            // UUID and keep the existing id on the conflict path.
+            const new_id = try generateUuidV4(self.allocator);
+            _ = try b.setFieldValue("id", new_id);
+            _ = try b.setFieldValue("owner_user_id", owner_user_id);
+            _ = try b.setFieldValue("conversation_id", conversation_id);
+            // zent schema fields are i64 — smallint inputs cast at the boundary
+            _ = try b.setFieldValue("conversation_type", @as(i64, conversation_type));
+            _ = try b.setFieldValue("user_id", user_id);
+            _ = try b.setFieldValue("group_id", group_id);
+            _ = try b.setFieldValue("latest_msg", latest_msg);
+            _ = try b.setFieldValue("latest_msg_send_time", latest_send_time);
+            _ = try b.setFieldValue("latest_msg_send_id", latest_send_id);
+            _ = try b.setFieldValue("latest_msg_content_type", @as(i64, latest_content_type));
+            _ = try b.setFieldValue("max_seq", max_seq);
+            _ = try b.setFieldValue("group_at_type", @as(i64, group_at_type));
+            var created = try b.SaveOrUpdateOnWith(
+                &.{ "owner_user_id", "conversation_id" },
+                &.{
+                    .{ .column = "id", .expr = "{t:id}" },
+                    .{ .column = "max_seq", .expr = "GREATEST({t:max_seq}, {x:max_seq})" },
+                    .{ .column = "group_at_type", .expr = "GREATEST({t:group_at_type}, {x:group_at_type})" },
+                    .{ .column = "update_time", .expr = "NOW()" },
+                },
+            );
+            zent_db.deinitRow(@TypeOf(client.conversation).entity_info, &created);
+            return;
+        }
         const sql = "INSERT INTO conversations (owner_user_id, conversation_id, conversation_type, user_id, group_id, recv_msg_opt, is_pinned, is_private_chat, burn_duration, attached_info, ex, max_seq, min_seq, has_read_seq, latest_msg, latest_msg_send_time, latest_msg_send_id, latest_msg_content_type, group_at_type, create_time, update_time) " ++
             "VALUES ($1, $2, $3, $4, $5, 0, FALSE, FALSE, 0, '', '', $6, 0, 0, $7, $8, $9, $10, $11, NOW(), NOW()) " ++
             "ON CONFLICT (owner_user_id, conversation_id) DO UPDATE SET " ++
@@ -183,6 +308,19 @@ pub const ConversationPersistence = struct {
     }
 
     pub fn get(self: *ConversationPersistence, owner_user_id: []const u8, conversation_id: []const u8) !?model.Conversation {
+        // zent path (preferred): DTO scan by column name — the projection is
+        // an expression (EXTRACT epoch) so raw SQL is the right tool
+        // (BEST_PRACTICES §1).
+        if (zent_db.getDriver()) |drv| {
+            const row = (zent.sql_scan.queryOne(
+                ConvRow,
+                self.allocator,
+                drv,
+                CONV_SELECT ++ " WHERE owner_user_id = $1 AND conversation_id = $2",
+                &.{ .{ .string = owner_user_id }, .{ .string = conversation_id } },
+            ) catch return null) orelse return null;
+            return convRowToModel(row);
+        }
         const sql = "SELECT id, owner_user_id, conversation_id, conversation_type, user_id, group_id, recv_msg_opt, is_pinned, is_private_chat, burn_duration, attached_info, ex, max_seq, min_seq, has_read_seq, latest_msg, latest_msg_send_time, latest_msg_send_id, latest_msg_content_type, group_at_type, EXTRACT(EPOCH FROM create_time)::bigint, EXTRACT(EPOCH FROM update_time)::bigint, is_msg_destruct, msg_destruct_time FROM conversations WHERE owner_user_id = $1 AND conversation_id = $2";
         const params = &[_]db_mod.QueryParam{ .{ .string = owner_user_id }, .{ .string = conversation_id } };
         const result = self.db.queryParams(sql, params) catch return null;
@@ -194,6 +332,19 @@ pub const ConversationPersistence = struct {
 
     pub fn getByOwner(self: *ConversationPersistence, allocator: std.mem.Allocator, owner_user_id: []const u8) ![]model.Conversation {
         _ = allocator;
+        if (zent_db.getDriver()) |drv| {
+            var rows = try zent.sql_scan.queryAll(
+                ConvRow,
+                self.allocator,
+                drv,
+                CONV_SELECT ++ " WHERE owner_user_id = $1",
+                &.{.{ .string = owner_user_id }},
+            );
+            defer rows.deinit();
+            const list = try self.allocator.alloc(model.Conversation, rows.items.len);
+            for (rows.items, 0..) |row, i| list[i] = convRowToModel(row);
+            return list;
+        }
         const sql = "SELECT id, owner_user_id, conversation_id, conversation_type, user_id, group_id, recv_msg_opt, is_pinned, is_private_chat, burn_duration, attached_info, ex, max_seq, min_seq, has_read_seq, latest_msg, latest_msg_send_time, latest_msg_send_id, latest_msg_content_type, group_at_type, EXTRACT(EPOCH FROM create_time)::bigint, EXTRACT(EPOCH FROM update_time)::bigint, is_msg_destruct, msg_destruct_time FROM conversations WHERE owner_user_id = $1";
         const params = &[_]db_mod.QueryParam{.{ .string = owner_user_id }};
         const result = try self.db.queryParams(sql, params);
@@ -210,6 +361,19 @@ pub const ConversationPersistence = struct {
 
     pub fn getByOwnerSince(self: *ConversationPersistence, allocator: std.mem.Allocator, owner_user_id: []const u8, since_timestamp: i64) ![]model.Conversation {
         _ = allocator;
+        if (zent_db.getDriver()) |drv| {
+            var rows = try zent.sql_scan.queryAll(
+                ConvRow,
+                self.allocator,
+                drv,
+                CONV_SELECT ++ " WHERE owner_user_id = $1 AND EXTRACT(EPOCH FROM update_time)::bigint > $2",
+                &.{ .{ .string = owner_user_id }, .{ .int = since_timestamp } },
+            );
+            defer rows.deinit();
+            const list = try self.allocator.alloc(model.Conversation, rows.items.len);
+            for (rows.items, 0..) |row, i| list[i] = convRowToModel(row);
+            return list;
+        }
         const sql = "SELECT id, owner_user_id, conversation_id, conversation_type, user_id, group_id, recv_msg_opt, is_pinned, is_private_chat, burn_duration, attached_info, ex, max_seq, min_seq, has_read_seq, latest_msg, latest_msg_send_time, latest_msg_send_id, latest_msg_content_type, group_at_type, EXTRACT(EPOCH FROM create_time)::bigint, EXTRACT(EPOCH FROM update_time)::bigint, is_msg_destruct, msg_destruct_time FROM conversations WHERE owner_user_id = $1 AND EXTRACT(EPOCH FROM update_time)::bigint > $2";
         const params = &[_]db_mod.QueryParam{ .{ .string = owner_user_id }, .{ .bigint = since_timestamp } };
         const result = try self.db.queryParams(sql, params);
@@ -225,6 +389,99 @@ pub const ConversationPersistence = struct {
     }
 
     pub fn update(self: *ConversationPersistence, owner_user_id: []const u8, conversation_id: []const u8, input: model.ConversationUpdateInput) !?model.Conversation {
+        // zent path (preferred): dynamic SET plus the non-schema update_time
+        // column is raw-by-design (BEST_PRACTICES §1 decision table), so this
+        // rides drv.exec through the zent pool — same statement as legacy.
+        if (zent_db.getDriver()) |drv| {
+            var set_parts = std.ArrayList([]const u8).empty;
+            defer set_parts.deinit(self.allocator);
+            var args = std.ArrayList(zent.sql.Value).empty;
+            defer args.deinit(self.allocator);
+            var idx: i32 = 1;
+
+            if (input.recv_msg_opt) |v| {
+                try set_parts.append(self.allocator, try std.fmt.allocPrint(self.allocator, "recv_msg_opt = ${d}", .{idx}));
+                try args.append(self.allocator, .{ .int = v });
+                idx += 1;
+            }
+            if (input.is_pinned) |v| {
+                try set_parts.append(self.allocator, try std.fmt.allocPrint(self.allocator, "is_pinned = ${d}", .{idx}));
+                try args.append(self.allocator, .{ .bool = v });
+                idx += 1;
+            }
+            if (input.group_at_type) |v| {
+                try set_parts.append(self.allocator, try std.fmt.allocPrint(self.allocator, "group_at_type = ${d}", .{idx}));
+                try args.append(self.allocator, .{ .int = v });
+                idx += 1;
+            }
+            if (input.attached_info) |v| {
+                try set_parts.append(self.allocator, try std.fmt.allocPrint(self.allocator, "attached_info = ${d}", .{idx}));
+                try args.append(self.allocator, .{ .string = v });
+                idx += 1;
+            }
+            if (input.ex) |v| {
+                try set_parts.append(self.allocator, try std.fmt.allocPrint(self.allocator, "ex = ${d}", .{idx}));
+                try args.append(self.allocator, .{ .string = v });
+                idx += 1;
+            }
+            if (input.is_msg_destruct) |v| {
+                try set_parts.append(self.allocator, try std.fmt.allocPrint(self.allocator, "is_msg_destruct = ${d}", .{idx}));
+                try args.append(self.allocator, .{ .bool = v });
+                idx += 1;
+            }
+            if (input.msg_destruct_time) |v| {
+                try set_parts.append(self.allocator, try std.fmt.allocPrint(self.allocator, "msg_destruct_time = ${d}", .{idx}));
+                try args.append(self.allocator, .{ .int = v });
+                idx += 1;
+            }
+            if (input.latest_msg) |v| {
+                try set_parts.append(self.allocator, try std.fmt.allocPrint(self.allocator, "latest_msg = ${d}", .{idx}));
+                try args.append(self.allocator, .{ .string = v });
+                idx += 1;
+            }
+            if (input.latest_msg_send_time) |v| {
+                try set_parts.append(self.allocator, try std.fmt.allocPrint(self.allocator, "latest_msg_send_time = ${d}", .{idx}));
+                try args.append(self.allocator, .{ .int = v });
+                idx += 1;
+            }
+            if (input.latest_msg_send_id) |v| {
+                try set_parts.append(self.allocator, try std.fmt.allocPrint(self.allocator, "latest_msg_send_id = ${d}", .{idx}));
+                try args.append(self.allocator, .{ .string = v });
+                idx += 1;
+            }
+            if (input.latest_msg_content_type) |v| {
+                try set_parts.append(self.allocator, try std.fmt.allocPrint(self.allocator, "latest_msg_content_type = ${d}", .{idx}));
+                try args.append(self.allocator, .{ .int = v });
+                idx += 1;
+            }
+            if (input.has_read_seq) |v| {
+                try set_parts.append(self.allocator, try std.fmt.allocPrint(self.allocator, "has_read_seq = ${d}", .{idx}));
+                try args.append(self.allocator, .{ .int = v });
+                idx += 1;
+            }
+            if (input.max_seq) |v| {
+                try set_parts.append(self.allocator, try std.fmt.allocPrint(self.allocator, "max_seq = ${d}", .{idx}));
+                try args.append(self.allocator, .{ .int = v });
+                idx += 1;
+            }
+
+            if (set_parts.items.len == 0) return self.get(owner_user_id, conversation_id);
+
+            try set_parts.append(self.allocator, "update_time = NOW()");
+            var set_clause = std.ArrayList(u8).empty;
+            defer set_clause.deinit(self.allocator);
+            for (set_parts.items, 0..) |part, i| {
+                if (i > 0) try set_clause.appendSlice(self.allocator, ", ");
+                try set_clause.appendSlice(self.allocator, part);
+            }
+
+            const sql = try std.fmt.allocPrint(self.allocator, "UPDATE conversations SET {s} WHERE owner_user_id = ${d} AND conversation_id = ${d}", .{ set_clause.items, idx, idx + 1 });
+            defer self.allocator.free(sql);
+            try args.append(self.allocator, .{ .string = owner_user_id });
+            try args.append(self.allocator, .{ .string = conversation_id });
+            _ = try drv.exec(sql, args.items);
+            return self.get(owner_user_id, conversation_id);
+        }
         var set_parts = std.ArrayList([]const u8).empty;
         defer set_parts.deinit(self.allocator);
         var params = std.ArrayList(db_mod.QueryParam).empty;
@@ -317,6 +574,14 @@ pub const ConversationPersistence = struct {
     }
 
     pub fn delete(self: *ConversationPersistence, owner_user_id: []const u8, conversation_id: []const u8) bool {
+        if (zent_db.getClient()) |client| {
+            const preds = client.conversation.predicates;
+            _ = zent.crud_helpers.delete(client.conversation, .{
+                preds.owner_user_idEQ(.{ .string = owner_user_id }),
+                preds.conversation_idEQ(.{ .string = conversation_id }),
+            }) catch return false;
+            return true;
+        }
         const sql = "DELETE FROM conversations WHERE owner_user_id = $1 AND conversation_id = $2";
         const params = &[_]db_mod.QueryParam{ .{ .string = owner_user_id }, .{ .string = conversation_id } };
         _ = self.db.execParams(sql, params) catch return false;
@@ -324,12 +589,27 @@ pub const ConversationPersistence = struct {
     }
 
     pub fn updateSeq(self: *ConversationPersistence, owner_user_id: []const u8, conversation_id: []const u8, max_seq: i64) !void {
+        // update_time is a non-schema column → raw through the zent pool.
+        if (zent_db.getDriver()) |drv| {
+            _ = try drv.exec(
+                "UPDATE conversations SET max_seq = $1, update_time = NOW() WHERE owner_user_id = $2 AND conversation_id = $3",
+                &.{ .{ .int = max_seq }, .{ .string = owner_user_id }, .{ .string = conversation_id } },
+            );
+            return;
+        }
         const sql = "UPDATE conversations SET max_seq = $1, update_time = NOW() WHERE owner_user_id = $2 AND conversation_id = $3";
         const params = &[_]db_mod.QueryParam{ .{ .bigint = max_seq }, .{ .string = owner_user_id }, .{ .string = conversation_id } };
         _ = try self.db.execParams(sql, params);
     }
 
     pub fn count(self: *ConversationPersistence) usize {
+        // zent path (preferred): typed aggregate (BEST_PRACTICES §4).
+        if (zent_db.getClient()) |client| {
+            var q = client.conversation.Query();
+            defer q.deinit();
+            const n = q.Count() catch return 0;
+            return @intCast(@max(n, 0));
+        }
         const sql = "SELECT COUNT(*) FROM conversations";
         const result = self.db.query(sql) catch return 0;
         defer freeResult(self.allocator, result);
@@ -340,6 +620,16 @@ pub const ConversationPersistence = struct {
     // ── Encryption keys ───────────────────────────────────────────
 
     pub fn getEncryptionKeys(self: *ConversationPersistence, conversation_id: []const u8, allocator: std.mem.Allocator) ![]model.VersionKey {
+        if (zent_db.getDriver()) |drv| {
+            var rows = try zent.sql_scan.queryAll(
+                model.VersionKey,
+                allocator,
+                drv,
+                "SELECT version, key_data AS key FROM encryption_keys WHERE conversation_id = $1 ORDER BY version DESC",
+                &.{.{ .string = conversation_id }},
+            );
+            return rows.toOwnedSlice();
+        }
         const sql = "SELECT version, key_data FROM encryption_keys WHERE conversation_id = $1 ORDER BY version DESC";
         const params = &[_]db_mod.QueryParam{.{ .string = conversation_id }};
         const result = self.db.queryParams(sql, params) catch return allocator.alloc(model.VersionKey, 0);
@@ -356,6 +646,26 @@ pub const ConversationPersistence = struct {
     }
 
     pub fn genEncryptionKey(self: *ConversationPersistence, conversation_id: []const u8) !void {
+        if (zent_db.getDriver()) |drv| {
+            const MaxVersion = struct { max: ?i64 };
+            const row = (zent.sql_scan.queryOne(
+                MaxVersion,
+                self.allocator,
+                drv,
+                "SELECT MAX(version) AS max FROM encryption_keys WHERE conversation_id = $1",
+                &.{.{ .string = conversation_id }},
+            ) catch return) orelse return;
+            const next_version: i32 = @intCast((row.max orelse 0) + 1);
+
+            const key_data = generateAESKey(self.allocator) catch return;
+            defer self.allocator.free(key_data);
+
+            _ = drv.exec(
+                "INSERT INTO encryption_keys (conversation_id, version, key_data) VALUES ($1, $2, $3)",
+                &.{ .{ .string = conversation_id }, .{ .int = next_version }, .{ .string = key_data } },
+            ) catch {};
+            return;
+        }
         const version_sql = "SELECT COALESCE(MAX(version), 0) FROM encryption_keys WHERE conversation_id = $1";
         const v_params = &[_]db_mod.QueryParam{.{ .string = conversation_id }};
         const v_result = self.db.queryParams(version_sql, v_params) catch return;

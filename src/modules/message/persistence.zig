@@ -1,6 +1,8 @@
 const std = @import("std");
 const core = @import("core");
 const db_mod = @import("../db_postgres.zig");
+const zent = @import("zent");
+const zent_db = @import("../../zent_db.zig");
 const model = @import("model.zig");
 
 pub const MessagePersistence = struct {
@@ -59,6 +61,15 @@ pub const MessagePersistence = struct {
     }
 
     pub fn activeDateCount(self: *MessagePersistence, allocator: std.mem.Allocator, start_time: i64, end_time: i64, group_mode: bool) ![]model.DayCount {
+        // zent path (preferred): DTO scanning by column name (docs/zent-migration.md).
+        if (zent_db.getDriver()) |drv| {
+            const sql = if (group_mode)
+                "SELECT to_char(create_time AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day, COUNT(*) AS count FROM messages WHERE group_id != '' AND EXTRACT(EPOCH FROM create_time)::bigint >= $1 AND EXTRACT(EPOCH FROM create_time)::bigint <= $2 GROUP BY 1 ORDER BY 1"
+            else
+                "SELECT to_char(create_time AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day, COUNT(*) AS count FROM messages WHERE group_id = '' AND EXTRACT(EPOCH FROM create_time)::bigint >= $1 AND EXTRACT(EPOCH FROM create_time)::bigint <= $2 GROUP BY 1 ORDER BY 1";
+            var rows = try zent.sql_scan.queryAll(model.DayCount, allocator, drv, sql, &.{ .{ .int = start_time }, .{ .int = end_time } });
+            return rows.toOwnedSlice();
+        }
         const sql = if (group_mode)
             "SELECT to_char(create_time AT TIME ZONE 'UTC', 'YYYY-MM-DD'), COUNT(*) FROM messages WHERE group_id != '' AND EXTRACT(EPOCH FROM create_time)::bigint >= $1 AND EXTRACT(EPOCH FROM create_time)::bigint <= $2 GROUP BY 1 ORDER BY 1"
         else
@@ -85,6 +96,15 @@ pub const MessagePersistence = struct {
 
     /// Top senders (user mode) or top groups (group mode) by message count.
     pub fn activeTopEntities(self: *MessagePersistence, allocator: std.mem.Allocator, start_time: i64, end_time: i64, group_mode: bool, limit: i64) ![]model.TopEntity {
+        // zent path (preferred): DTO scanning by column name (docs/zent-migration.md).
+        if (zent_db.getDriver()) |drv| {
+            const sql = if (group_mode)
+                "SELECT m.group_id AS id, g.group_name AS name, g.face_url AS face_url, COUNT(*) AS count FROM messages m JOIN groups g ON m.group_id = g.group_id WHERE m.group_id != '' AND EXTRACT(EPOCH FROM m.create_time)::bigint >= $1 AND EXTRACT(EPOCH FROM m.create_time)::bigint <= $2 GROUP BY m.group_id, g.group_name, g.face_url ORDER BY 4 DESC LIMIT $3"
+            else
+                "SELECT m.sender_id AS id, u.nickname AS name, u.face_url AS face_url, COUNT(*) AS count FROM messages m JOIN users u ON m.sender_id = u.user_id WHERE m.group_id = '' AND EXTRACT(EPOCH FROM m.create_time)::bigint >= $1 AND EXTRACT(EPOCH FROM m.create_time)::bigint <= $2 GROUP BY m.sender_id, u.nickname, u.face_url ORDER BY 4 DESC LIMIT $3";
+            var rows = try zent.sql_scan.queryAll(model.TopEntity, allocator, drv, sql, &.{ .{ .int = start_time }, .{ .int = end_time }, .{ .int = limit } });
+            return rows.toOwnedSlice();
+        }
         const sql = if (group_mode)
             "SELECT m.group_id, g.group_name, g.face_url, COUNT(*) FROM messages m JOIN groups g ON m.group_id = g.group_id WHERE m.group_id != '' AND EXTRACT(EPOCH FROM m.create_time)::bigint >= $1 AND EXTRACT(EPOCH FROM m.create_time)::bigint <= $2 GROUP BY m.group_id, g.group_name, g.face_url ORDER BY 4 DESC LIMIT $3"
         else

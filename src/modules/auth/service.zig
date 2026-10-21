@@ -1,5 +1,5 @@
 const std = @import("std");
-const zigmodu = @import("zigmodu");
+const zmodu = @import("zmodu");
 const core = @import("core");
 const user_mod = @import("../../modules/user.zig");
 const model = @import("model.zig");
@@ -148,7 +148,7 @@ pub const AuthService = struct {
         }
 
         // Pass the raw password; UserService.create hashes it once with
-        // zigmodu.security.PasswordEncoder (PBKDF2-HMAC-SHA256). Hashing here
+        // zmodu.security.PasswordEncoder (PBKDF2-HMAC-SHA256). Hashing here
         // too would double-hash and break login verification.
         const user = try user_mod.createUser(user_mod.UserCreateInput{
             .user_id = user_id,
@@ -218,12 +218,12 @@ pub const AuthService = struct {
         return code;
     }
 
-    pub fn verifyCode(self: *AuthService, phone_number: ?[]const u8, email: ?[]const u8, code: []const u8) bool {
-        return self.pers.checkVerificationCode(phone_number, email, code);
+    pub fn verifyCode(self: *AuthService, phone_number: ?[]const u8, email: ?[]const u8, area_code: ?[]const u8, code: []const u8) bool {
+        return self.pers.checkVerificationCode(phone_number, email, area_code, code);
     }
 
     pub fn resetPassword(self: *AuthService, user_id: []const u8, new_password: []const u8) !bool {
-        var encoder = zigmodu.security.PasswordEncoder.init(self.allocator);
+        var encoder = zmodu.security.PasswordEncoder.init(self.allocator, core.getIo());
         const new_hash = try encoder.encode(new_password);
         defer self.allocator.free(new_hash);
         return user_mod.updatePassword(user_id, new_hash);

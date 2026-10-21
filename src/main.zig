@@ -1,5 +1,5 @@
 const std = @import("std");
-const zigmodu = @import("zigmodu");
+const zmodu = @import("zmodu");
 const sdkws = @import("sdkws");
 const core = @import("core");
 
@@ -22,7 +22,7 @@ const organization = @import("modules/organization.zig");
 const third = @import("modules/third.zig");
 const crontask = @import("modules/crontask.zig");
 
-// Event handler functions (using core.Event for zigmodu-native TypedEventBus)
+// Event handler functions (using core.Event for zmodu-native TypedEventBus)
 fn onUserCreated(ev: core.Event) void {
     core.logInfo("[EventBus] User created: {s}", .{ev.payload});
 }
@@ -214,7 +214,7 @@ fn subscribeEvents() !void {
     const eb = core.getEventBus();
 
     try eb.subscribe(.user_created, onUserCreated, "gateway");
-    // High-volume handlers dispatch on the zigmodu WorkerPool (async bus)
+    // High-volume handlers dispatch on the zmodu WorkerPool (async bus)
     try eb.subscribeAsync(.user_online, onUserOnline, "gateway");
     try eb.subscribeAsync(.user_offline, onUserOffline, "gateway");
     try eb.subscribeAsync(.message_sent, onMessageSent, "push");
@@ -236,22 +236,22 @@ fn subscribeEvents() !void {
 pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
 
-    // Initialize core infrastructure first (before zigmodu Application)
+    // Initialize core infrastructure first (before zmodu Application)
     try core.init(allocator, init.io);
     core.initMetrics();
 
     core.logInfo("========================================", .{});
     core.logInfo("  ZIM Server v0.4.0 (Modulith)", .{});
     core.logInfo("  OpenIM Server Rewrite in Zig", .{});
-    core.logInfo("  Framework: zigmodu v0.15.22", .{});
+    core.logInfo("  Framework: zmodu v0.42.0", .{});
     core.logInfo("  Mode: Deep Integration (ThreadSafeEventBus + WorkerPool + RuntimeOptions)", .{});
     core.logInfo("========================================", .{});
 
     // Structured startup event (readable JSON) — same sink as access logs.
-    core.logJson(.{ .event = "zim_startup", .version = "0.4.0", .framework = "zigmodu-0.15.10", .mode = "modulith" });
+    core.logJson(.{ .event = "zim_startup", .version = "0.4.0", .framework = "zmodu-0.42.0", .mode = "modulith" });
 
-    // Initialize Application using the zigmodu ApplicationBuilder (fluent API)
-    var app_builder = zigmodu.builder(allocator, init.io);
+    // Initialize Application using the zmodu ApplicationBuilder (fluent API)
+    var app_builder = zmodu.builder(allocator, init.io);
     var app = try app_builder
         .withName("zim")
         .withValidation(true)
@@ -286,7 +286,22 @@ pub fn main(init: std.process.Init) !void {
     try app.start();
     core.logInfo("All modules started", .{});
 
-    // Report per-module runtime resource usage (zigmodu ModuleRuntime)
+    // zent ORM layer (Phase-0 pilot): pooled typed client on the same DB.
+    // Non-fatal by design — the legacy db_postgres client stays authoritative
+    // while persistence migrates table by table (see docs/zent-migration.md).
+    {
+        const zent_db = @import("zent_db.zig");
+        const zcfg = config.getConfig().database;
+        if (zent_db.init(allocator, zcfg.host, zcfg.port, zcfg.name, zcfg.user, zcfg.password)) {
+            core.logInfo("zent ORM layer ready (pilot: users)", .{});
+        } else |err| {
+            core.logJson(.{ .event = "zent_init_failed", .err = @errorName(err) });
+        }
+    }
+    // Declared after the app/core defer so the zent pool closes first (LIFO).
+    defer @import("zent_db.zig").deinit();
+
+    // Report per-module runtime resource usage (zmodu ModuleRuntime)
     for ([_][]const u8{ "gateway", "websocket", "push", "db_postgres", "auth", "message", "crontask" }) |name| {
         if (core.getModuleRuntime(name)) |rt| {
             if (rt.getWorkerPoolStats()) |stats| {

@@ -5,8 +5,8 @@
 // modules/gateway.zig (GatewayRoutes / sendFail / isPublicPath / getBearerToken).
 // ============================================================
 
-const zigmodu = @import("zigmodu");
-const http = zigmodu.http;
+const zmodu = @import("zmodu");
+const http = zmodu.http;
 
 const helpers = @import("handlers/helpers.zig");
 const auth_h = @import("handlers/auth.zig");

@@ -3,7 +3,7 @@ const std = @import("std");
 // NOTE: keep tests independent of HTTP server state; they use direct module calls + Testkit.
 // test runner note: first-run-after-compile flake is a zig 0.17-dev runner issue; binary passes 8/8.
 const core = @import("core");
-const zigmodu = @import("zigmodu");
+const zmodu = @import("zmodu");
 const gateway = @import("modules/gateway.zig");
 const auth_svc = @import("modules/auth/service.zig");
 
@@ -433,13 +433,13 @@ test "multi-terminal login policies" {
 // ============================================================
 // Gateway HTTP contract (Testkit — no network binding)
 // ============================================================
-fn buildTestServer(allocator: std.mem.Allocator) !struct { server: zigmodu.http.Server, catalog: zigmodu.http.RouteCatalog } {
+fn buildTestServer(allocator: std.mem.Allocator) !struct { server: zmodu.http.Server, catalog: zmodu.http.RouteCatalog } {
     // g_registered_paths is a process-global — initialize it on a static
     // allocator so per-test arenas cannot dangle it after deinit.
     try gateway.initRegisteredPaths(std.heap.page_allocator);
     const io = std.testing.io;
 
-    var server = zigmodu.http.Server.init(io, allocator, 0);
+    var server = zmodu.http.Server.init(io, allocator, 0);
     // NOTE: production mounts requestArenaMiddleware here, but tests manage the
     // request arena via IntegrationCtx — mounting it would reset requestAllocator
     // to null after each dispatch (leaking later service results onto the global
@@ -451,7 +451,7 @@ fn buildTestServer(allocator: std.mem.Allocator) !struct { server: zigmodu.http.
         gateway: gateway.GatewayRoutes.State,
     };
     var app_state = AppState{ .gateway = .{} };
-    var router = zigmodu.http.Router(AppState).init(io, allocator, &server, &app_state);
+    var router = zmodu.http.Router(AppState).init(io, allocator, &server, &app_state);
     var scoped = router.scope("");
     try scoped.mountAll(.{.{ .Mod = gateway.GatewayRoutes, .state = &app_state.gateway }});
     const catalog = try router.finish();
@@ -472,13 +472,13 @@ test "gateway HTTP contract: health/metrics/public" {
     }
 
     // /health — OpenIM envelope, status UP (liveness ok, db reported DOWN pre-init)
-    var resp = try zigmodu.http.Testkit.dispatch(&holder.server, .GET, "/health", null);
+    var resp = try zmodu.http.Testkit.dispatch(&holder.server, .GET, "/health", null);
     defer resp.deinit(allocator);
     try std.testing.expectEqual(@as(u16, 200), resp.status_code);
     try std.testing.expect(std.mem.indexOf(u8, resp.body, "\"status\"") != null);
 
     // /metrics — Prometheus text
-    var mresp = try zigmodu.http.Testkit.dispatch(&holder.server, .GET, "/metrics", null);
+    var mresp = try zmodu.http.Testkit.dispatch(&holder.server, .GET, "/metrics", null);
     defer mresp.deinit(allocator);
     try std.testing.expectEqual(@as(u16, 200), mresp.status_code);
     try std.testing.expect(std.mem.startsWith(u8, mresp.body, "# HELP"));
@@ -497,19 +497,19 @@ test "gateway HTTP contract: auth + 404 + CORS" {
     }
 
     // Protected route without token -> 401 envelope (HTTP 200 + errCode)
-    var auth = try zigmodu.http.Testkit.dispatch(&holder.server, .POST, "/user/get_users_info", "{\"userIDs\":[]}");
+    var auth = try zmodu.http.Testkit.dispatch(&holder.server, .POST, "/user/get_users_info", "{\"userIDs\":[]}");
     defer auth.deinit(allocator);
     try std.testing.expectEqual(@as(u16, 200), auth.status_code);
     try std.testing.expect(std.mem.indexOf(u8, auth.body, "\"errCode\":401") != null);
 
     // Unknown path -> 404 envelope
-    var notfound = try zigmodu.http.Testkit.dispatch(&holder.server, .GET, "/nope", null);
+    var notfound = try zmodu.http.Testkit.dispatch(&holder.server, .GET, "/nope", null);
     defer notfound.deinit(allocator);
     try std.testing.expectEqual(@as(u16, 200), notfound.status_code);
     try std.testing.expect(std.mem.indexOf(u8, notfound.body, "\"errCode\":404") != null);
 
     // OPTIONS preflight -> 204
-    var options = try zigmodu.http.Testkit.dispatch(&holder.server, .OPTIONS, "/msg/send_msg", null);
+    var options = try zmodu.http.Testkit.dispatch(&holder.server, .OPTIONS, "/msg/send_msg", null);
     defer options.deinit(allocator);
     try std.testing.expectEqual(@as(u16, 204), options.status_code);
 }
@@ -575,6 +575,16 @@ const IntegrationCtx = struct {
         const arena_ptr = allocator.create(std.heap.ArenaAllocator) catch return null;
         arena_ptr.* = std.heap.ArenaAllocator.init(allocator);
         core.setRequestAllocator(arena_ptr.allocator());
+
+        // zent ORM layer — same DB, so it initializes whenever PostgreSQL is
+        // reachable; migrated persistence paths (collects, statistics DTO
+        // scans) then exercise the zent driver in every integration test.
+        const zent_db = @import("zent_db.zig");
+        const zcfg = config_mod.getConfig().database;
+        zent_db.init(allocator, zcfg.host, zcfg.port, zcfg.name, zcfg.user, zcfg.password) catch |err| {
+            std.log.warn("[integration] zent layer unavailable ({s}) — legacy paths", .{@errorName(err)});
+        };
+
         return .{ .arena_ptr = arena_ptr, .suffix = core.unixNowMillis() };
     }
 
@@ -606,6 +616,9 @@ const IntegrationCtx = struct {
         conversation_mod.deinit();
         user_mod.deinit();
         event_bus_mod.deinit();
+        // zent pool closes before db_postgres: migrated paths must not touch
+        // it after this point (the guard in deinit makes it idempotent).
+        @import("zent_db.zig").deinit();
         db_mod.deinit();
         config_mod.deinit();
         const gw_root = @import("modules/gateway/root.zig");
@@ -636,6 +649,291 @@ const IntegrationCtx = struct {
         try friend_mod.respondFriendRequest(a, b, true, "ok");
     }
 };
+
+// ============================================================
+// zent ORM pilot: pooled zent client ↔ zim persistence interop
+// on the same `users` table (two independent PostgreSQL stacks)
+// ============================================================
+test "zent: ORM client interops with zim persistence on users" {
+    const allocator = std.testing.allocator;
+    var ctx = IntegrationCtx.init(allocator) orelse return;
+    defer ctx.deinit();
+
+    const zent_db = @import("zent_db.zig");
+    const zent = @import("zent");
+    const user_mod = @import("modules/user.zig");
+
+    const client = zent_db.getClient() orelse {
+        std.log.warn("[zent] layer not initialized — skipping", .{});
+        return;
+    };
+    const UserClient = @TypeOf(client.user);
+    const user_info = UserClient.entity_info;
+    const preds = client.user.predicates;
+    const uid = try ctx.uid("zentpilot");
+
+    // 1) zent Create → real row in zim's users table
+    var created = try zent.crud_helpers.create(client.user, .{
+        .user_id = uid,
+        .nickname = "Zent Pilot",
+        .gender = 2,
+    });
+    defer zent_db.deinitRow(user_info, &created);
+    try std.testing.expectEqualStrings(uid, created.user_id);
+
+    // 2) zim persistence reads the zent-written row (cross-stack read;
+    // result strings live in the request arena — no manual free)
+    const u = (try user_mod.getUser(uid)).?;
+    try std.testing.expectEqualStrings("Zent Pilot", u.nickname);
+
+    // 3) zent Update → zim sees the change
+    const n_updated = try zent.crud_helpers.update(client.user, .{ .nickname = "Zent Pilot v2" }, .{preds.user_idEQ(.{ .string = uid })});
+    try std.testing.expectEqual(@as(usize, 1), n_updated);
+    const u_after = (try user_mod.getUser(uid)).?;
+    try std.testing.expectEqualStrings("Zent Pilot v2", u_after.nickname);
+
+    // 4) zent read-back (typed entity, string pk) + cleanup via zent delete
+    var fetched = (try zent.crud_helpers.first(client.user, .{preds.user_idEQ(.{ .string = uid })})).?;
+    defer zent_db.deinitRow(user_info, &fetched);
+    try std.testing.expectEqual(@as(i64, 2), fetched.gender);
+    try std.testing.expectEqualStrings("Zent Pilot v2", fetched.nickname);
+
+    const n_del = try zent.crud_helpers.delete(client.user, .{preds.user_idEQ(.{ .string = uid })});
+    try std.testing.expectEqual(@as(usize, 1), n_del);
+    try std.testing.expect((try user_mod.getUser(uid)) == null);
+}
+
+// ============================================================
+// zent migration slice 1: collects — the service layer runs on
+// the zent-backed persistence (INSERT..RETURNING DTO scan, typed
+// entity delete, aliased-column list scan) end to end
+// ============================================================
+test "zent: collects CRUD through office service" {
+    const allocator = std.testing.allocator;
+    var ctx = IntegrationCtx.init(allocator) orelse return;
+    defer ctx.deinit();
+
+    const zent_db = @import("zent_db.zig");
+    if (zent_db.getClient() == null) {
+        std.log.warn("[zent] layer not initialized — skipping", .{});
+        return;
+    }
+
+    const office_mod = @import("modules/office.zig");
+    const arena = ctx.arena_ptr.allocator();
+    const a = try ctx.register("col_a");
+
+    // addCollect → INSERT..RETURNING scanned into model.Collect by column name
+    const c1 = try office_mod.addCollect(a, "msg", "{\"text\":\"first\"}", "uuid-1");
+    try std.testing.expect(c1.create_time > 0);
+    const c2 = try office_mod.addCollect(a, "card", "{\"text\":\"second\"}", "uuid-2");
+    const other = try ctx.register("col_b");
+    const c3 = try office_mod.addCollect(other, "msg", "{\"text\":\"other user\"}", "uuid-3");
+
+    // getCollects (all types) — zent driver list scan, IN clause omitted
+    const all = try office_mod.getCollects(arena, a, &.{}, 1, 10);
+    try std.testing.expectEqual(@as(usize, 2), all.len);
+
+    // getCollects (type filter) — dynamic IN clause through the zent driver
+    const filtered = try office_mod.getCollects(arena, a, &.{"msg"}, 1, 10);
+    try std.testing.expectEqual(@as(usize, 1), filtered.len);
+    try std.testing.expectEqualStrings("uuid-1", filtered[0].uuid);
+
+    // ownership check: delete uses id AND user_id predicates — the other
+    // user's row must survive a foreign delete attempt
+    _ = try office_mod.removeCollect(a, &.{c2.id});
+    const after_del = try office_mod.getCollects(arena, a, &.{}, 1, 10);
+    try std.testing.expectEqual(@as(usize, 1), after_del.len);
+
+    // cleanup (typed entity delete: id + user_id predicates)
+    _ = try office_mod.removeCollect(a, &.{c1.id});
+    _ = try office_mod.removeCollect(other, &.{c3.id});
+    const final_rows = try office_mod.getCollects(arena, a, &.{}, 1, 10);
+    try std.testing.expectEqual(@as(usize, 0), final_rows.len);
+}
+
+// ============================================================
+// zent migration slice 2: auth tokens / verification codes /
+// fcm tokens / webhook events — service layer on the zent-backed
+// persistence (driver exec for SQL-computed writes, DTO scans
+// for reads)
+// ============================================================
+test "zent: auth token + verification code + fcm + webhook lifecycle" {
+    const allocator = std.testing.allocator;
+    var ctx = IntegrationCtx.init(allocator) orelse return;
+    defer ctx.deinit();
+
+    const zent_db = @import("zent_db.zig");
+    if (zent_db.getDriver() == null) {
+        std.log.warn("[zent] layer not initialized — skipping", .{});
+        return;
+    }
+
+    const core_mod = core;
+    const auth_mod = @import("modules/auth.zig");
+    const third_mod = @import("modules/third.zig");
+    const arena = ctx.arena_ptr.allocator();
+
+    // -- auth_tokens: login stores → parseToken reads → forceLogout deletes --
+    const uid = try ctx.register("tok_a");
+    const tok = try auth_mod.loginWithPassword(uid, "test1234", 3);
+    const parsed = try auth_mod.parseToken(tok.token);
+    try std.testing.expectEqualStrings(uid, parsed.user_id);
+    try std.testing.expectEqual(@as(i32, 3), parsed.platform_id);
+    try std.testing.expect(parsed.expire_time > core_mod.unixNowSeconds());
+
+    auth_mod.forceLogout(uid);
+    try std.testing.expectError(error.InvalidToken, auth_mod.parseToken(tok.token));
+
+    // -- auth_verification_codes: create → 60s rate limit → wrong code
+    //    (not consumed) → correct code (consumed) --
+    const email = try std.fmt.allocPrint(arena, "a2_vc_{d}@test.dev", .{ctx.suffix});
+    const code = try auth_mod.sendVerificationCode(null, email, null);
+    try std.testing.expectEqual(@as(usize, 6), code.len);
+    try std.testing.expectError(error.CodeTooFrequent, auth_mod.sendVerificationCode(null, email, null));
+
+    // wrong code must not consume the stored code (1/1e6 collision guard)
+    const probe = if (std.mem.eql(u8, code, "999999")) "999998" else "999999";
+    try std.testing.expect(!auth_mod.verifyCode(null, email, null, probe));
+    try std.testing.expect(auth_mod.verifyCode(null, email, null, code));
+    try std.testing.expect(!auth_mod.verifyCode(null, email, null, code)); // one-time use
+
+    // after consumption the target is free again — resend + consume to clean up
+    const code2 = try auth_mod.sendVerificationCode(null, email, null);
+    try std.testing.expect(auth_mod.verifyCode(null, email, null, code2));
+
+    // -- fcm_tokens: upsert on (user_id, platform_id) + per-platform read --
+    try third_mod.saveFCMToken(uid, 2, "fcm-token-aaa");
+    try std.testing.expectEqualStrings("fcm-token-aaa", (try third_mod.getFCMToken(uid, 2)).?);
+    try third_mod.saveFCMToken(uid, 2, "fcm-token-bbb");
+    try std.testing.expectEqualStrings("fcm-token-bbb", (try third_mod.getFCMToken(uid, 2)).?);
+    try std.testing.expect((try third_mod.getFCMToken(uid, 9)) == null);
+
+    // -- webhook_events: queue → pending scan → mark delivered --
+    const payload = try std.fmt.allocPrint(arena, "{{\"tag\":{d}}}", .{ctx.suffix});
+    try third_mod.queueWebhookEvent("zent_slice2_test", payload);
+    var found: ?i32 = null;
+    var pending = try third_mod.getPendingWebhookEvents(arena, 100);
+    for (pending.events) |ev| {
+        if (std.mem.eql(u8, ev.event_type, "zent_slice2_test") and std.mem.eql(u8, ev.payload, payload)) found = ev.id;
+    }
+    try std.testing.expect(found != null);
+    try third_mod.markWebhookEventDelivered(found.?);
+    pending = try third_mod.getPendingWebhookEvents(arena, 100);
+    for (pending.events) |ev| {
+        if (ev.id == found.?) return error.DeliveredEventStillPending;
+    }
+}
+
+// ============================================================
+// Verification code: phone target with a non-empty area code
+// round-trips (Phase 79 fix — verify used to hardcode the area
+// code away, so any code sent with one could never be verified)
+// ============================================================
+test "verification code: area-code phone target round-trips" {
+    const allocator = std.testing.allocator;
+    var ctx = IntegrationCtx.init(allocator) orelse return;
+    defer ctx.deinit();
+
+    const auth_mod = @import("modules/auth.zig");
+    const arena = ctx.arena_ptr.allocator();
+    const phone = try std.fmt.allocPrint(arena, "138{d:0>8}", .{@mod(ctx.suffix, 100000000)});
+    const code = try auth_mod.sendVerificationCode(phone, null, "86");
+    try std.testing.expect(auth_mod.verifyCode(phone, null, "86", code));
+}
+
+// ============================================================
+// zent migration slice 3: office work moments + tags — service
+// layer on the zent-backed persistence (12-column WorkMoment
+// DTO scans, JSONB writes via driver exec, per-tag member
+// subqueries)
+// ============================================================
+test "zent: office work moment + tag lifecycle through service" {
+    const allocator = std.testing.allocator;
+    var ctx = IntegrationCtx.init(allocator) orelse return;
+    defer ctx.deinit();
+
+    const zent_db = @import("zent_db.zig");
+    if (zent_db.getDriver() == null) {
+        std.log.warn("[zent] layer not initialized — skipping", .{});
+        return;
+    }
+
+    const office_mod = @import("modules/office.zig");
+    const arena = ctx.arena_ptr.allocator();
+    const a = try ctx.register("wm_a"); // author
+    const b = try ctx.register("wm_b"); // friend / liker / commenter
+    try ctx.makeFriends(a, b);
+
+    // create with @b → create_time set, empty like/comment arrays
+    const at_json = try std.fmt.allocPrint(arena, "[\"{s}\"]", .{b});
+    const wm = try office_mod.createWorkMoment(.{
+        .user_id = a,
+        .content = "hello moment",
+        .metas = "[]",
+        .permission = "0",
+        .at_user_ids = at_json,
+        .permission_user_ids = "[]",
+    });
+    try std.testing.expect(wm.create_time > 0);
+
+    // get re-reads with the users JOIN → author profile attached
+    const got = (try office_mod.getWorkMoment(wm.id)).?;
+    try std.testing.expectEqualStrings("hello moment", got.content);
+    try std.testing.expectEqualStrings("A2 wm_a", got.nickname);
+
+    // like is idempotent-guarded: first succeeds, duplicate is a no-op
+    try std.testing.expect(office_mod.likeWorkMoment(wm.id, b, "A2 wm_b", ""));
+    try std.testing.expect(!office_mod.likeWorkMoment(wm.id, b, "A2 wm_b", ""));
+    const liked = (try office_mod.getWorkMoment(wm.id)).?;
+    // PG jsonb text output normalizes separators (": "), so match the bare id
+    try std.testing.expect(std.mem.indexOf(u8, liked.like_users, b) != null);
+
+    // comment appends into the JSONB array
+    try std.testing.expect(office_mod.addComment(wm.id, b, "A2 wm_b", "", null, null, null, "nice!"));
+    const commented = (try office_mod.getWorkMoment(wm.id)).?;
+    try std.testing.expect(std.mem.indexOf(u8, commented.comments, "nice!") != null);
+
+    // unread: author sees like/comment activity, @'d user sees the moment
+    try std.testing.expect(office_mod.getUnreadWorkMomentsCount(a) > 0);
+    try std.testing.expect(office_mod.getUnreadWorkMomentsCount(b) > 0);
+    office_mod.clearUnreadWorkMoments(a, 3);
+    try std.testing.expectEqual(@as(u32, 0), office_mod.getUnreadWorkMomentsCount(a));
+
+    // send list (own) and recv list (friend feed, permission '0' default)
+    const send_list = try office_mod.getSendWorkMoments(arena, a, b, 1, 10);
+    try std.testing.expectEqual(@as(usize, 1), send_list.len);
+    const recv_list = try office_mod.getRecvWorkMoments(arena, b, 1, 10);
+    try std.testing.expect(recv_list.len >= 1);
+    try std.testing.expect(std.mem.indexOf(u8, recv_list[0].content, "hello moment") != null);
+    try std.testing.expect((try office_mod.getRecvWorkMomentsCount(b)) >= 1);
+
+    // relevant feed (own moments) contains it
+    const relevant = try office_mod.findRelevantWorkMoments(arena, a, 1, 10);
+    try std.testing.expect(relevant.len >= 1);
+
+    // tags: create with member → getTags fills user_id_list from tag_members
+    const tag = try office_mod.createTag(.{ .user_id = a, .tag_name = "friends", .user_ids = &.{b} });
+    try std.testing.expectEqualStrings("friends", tag.tag_name);
+    var tags = try office_mod.getTags(arena, a);
+    try std.testing.expectEqual(@as(usize, 1), tags.len);
+    try std.testing.expectEqual(@as(usize, 1), tags[0].user_id_list.len);
+    try std.testing.expectEqualStrings(b, tags[0].user_id_list[0]);
+
+    // update: rename + add members
+    try std.testing.expect(try office_mod.updateTag(.{ .tag_id = tag.id, .tag_name = "best", .add_user_ids = &.{a} }));
+    tags = try office_mod.getTags(arena, a);
+    try std.testing.expectEqualStrings("best", tags[0].tag_name);
+    try std.testing.expectEqual(@as(usize, 2), tags[0].user_id_list.len);
+
+    // unlike + delete work moment; delete tag
+    try std.testing.expect(office_mod.unlikeWorkMoment(wm.id, b));
+    try std.testing.expect(office_mod.deleteWorkMoment(wm.id, a));
+    try std.testing.expect((try office_mod.getWorkMoment(wm.id)) == null);
+    try std.testing.expect(try office_mod.deleteTag(tag.id));
+    tags = try office_mod.getTags(arena, a);
+    try std.testing.expectEqual(@as(usize, 0), tags.len);
+}
 
 // ============================================================
 // A2-T1: friend blacklist — add/remove + message blocking
@@ -852,7 +1150,7 @@ test "camelCase contract: user/friend/black/message/conversation JSON" {
     try ctx.makeFriends(a, b);
 
     const tok = try auth_mod.loginWithPassword(a, "test1234", 1);
-    const token_header: zigmodu.http.Testkit.HeaderPair = .{ "token", tok.token };
+    const token_header: zmodu.http.Testkit.HeaderPair = .{ "token", tok.token };
 
     // Testkit contexts use `server.allocator` for request-scoped allocations
     // (bindJson deepCopy etc.) with no per-request arena — wrap in an arena so
@@ -866,7 +1164,7 @@ test "camelCase contract: user/friend/black/message/conversation JSON" {
     }
 
     // /user/get_users_info — UserInfo camelCase keys
-    var u = try zigmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/user/get_users_info", .{
+    var u = try zmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/user/get_users_info", .{
         .body = try std.fmt.allocPrint(ctx.arena_ptr.allocator(), "{{\"userIDs\":[\"{s}\"]}}", .{a}),
         .headers = &.{token_header},
     });
@@ -878,7 +1176,7 @@ test "camelCase contract: user/friend/black/message/conversation JSON" {
     try std.testing.expect(std.mem.indexOf(u8, u.body, "\"appMangerLevel\"") != null);
 
     // /friend/get_friend_list — FriendInfo nested friendUser + isPinned + total
-    var f = try zigmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/friend/get_friend_list", .{
+    var f = try zmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/friend/get_friend_list", .{
         .body = try std.fmt.allocPrint(ctx.arena_ptr.allocator(), "{{\"userID\":\"{s}\"}}", .{a}),
         .headers = &.{token_header},
     });
@@ -890,7 +1188,7 @@ test "camelCase contract: user/friend/black/message/conversation JSON" {
 
     // /msg/send_msg — Go SendMsgResp contract (serverMsgID/clientMsgID/sendTime/modify)
     // NOTE: must run while A and B are still friends (before addBlack below).
-    var m = try zigmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/msg/send_msg", .{
+    var m = try zmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/msg/send_msg", .{
         .body = try std.fmt.allocPrint(ctx.arena_ptr.allocator(), "{{\"sendID\":\"{s}\",\"recvID\":\"{s}\",\"sessionType\":1,\"contentType\":101,\"content\":\"ct\"}}", .{ a, b }),
         .headers = &.{token_header},
     });
@@ -905,7 +1203,7 @@ test "camelCase contract: user/friend/black/message/conversation JSON" {
     _ = try friend_mod.addBlack(a, b);
 
     // /friend/get_black_list — blacks + blackUserInfo
-    var bl = try zigmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/friend/get_black_list", .{
+    var bl = try zmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/friend/get_black_list", .{
         .body = try std.fmt.allocPrint(ctx.arena_ptr.allocator(), "{{\"userID\":\"{s}\"}}", .{a}),
         .headers = &.{token_header},
     });
@@ -915,7 +1213,7 @@ test "camelCase contract: user/friend/black/message/conversation JSON" {
     try std.testing.expect(std.mem.indexOf(u8, bl.body, "\"blackUserInfo\"") != null);
 
     // After blocking, the friend list no longer contains b
-    var f2 = try zigmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/friend/get_friend_list", .{
+    var f2 = try zmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/friend/get_friend_list", .{
         .body = try std.fmt.allocPrint(ctx.arena_ptr.allocator(), "{{\"userID\":\"{s}\"}}", .{a}),
         .headers = &.{token_header},
     });
@@ -924,7 +1222,7 @@ test "camelCase contract: user/friend/black/message/conversation JSON" {
     try std.testing.expect(std.mem.indexOf(u8, f2.body, "\"friendsInfo\":[]") != null);
 
     // /conversation/get_sorted_conversation_list — conversationElems + totals
-    var c = try zigmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/conversation/get_sorted_conversation_list", .{
+    var c = try zmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/conversation/get_sorted_conversation_list", .{
         .body = try std.fmt.allocPrint(ctx.arena_ptr.allocator(), "{{\"userID\":\"{s}\"}}", .{a}),
         .headers = &.{token_header},
     });
@@ -1195,13 +1493,13 @@ test "group: member list respects look_member_info" {
 
     const body = try std.fmt.allocPrint(ctx.arena_ptr.allocator(), "{{\"groupID\":\"{s}\"}}", .{grp.group_id});
     const mk = struct {
-        fn header(tok: []const u8) zigmodu.http.Testkit.HeaderPair {
+        fn header(tok: []const u8) zmodu.http.Testkit.HeaderPair {
             return .{ "token", tok };
         }
     }.header;
 
     // Non-member → 403
-    var denied = try zigmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/group/get_group_member_list", .{
+    var denied = try zmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/group/get_group_member_list", .{
         .body = body,
         .headers = &.{mk(outsider_tok.token)},
     });
@@ -1209,7 +1507,7 @@ test "group: member list respects look_member_info" {
     try std.testing.expect(std.mem.indexOf(u8, denied.body, "\"errCode\":403") != null);
 
     // Member → 200 with the roster
-    var allowed = try zigmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/group/get_group_member_list", .{
+    var allowed = try zmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/group/get_group_member_list", .{
         .body = body,
         .headers = &.{mk(member_tok.token)},
     });
@@ -1392,13 +1690,13 @@ test "handler contract: statistics/office/rtc/organization/third" {
     }
 
     const mk = struct {
-        fn hdr(t: []const u8) zigmodu.http.Testkit.HeaderPair {
+        fn hdr(t: []const u8) zmodu.http.Testkit.HeaderPair {
             return .{ "token", t };
         }
     }.hdr;
 
     // /statistics/user/register — register counts
-    var st = try zigmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/statistics/user/register", .{
+    var st = try zmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/statistics/user/register", .{
         .body = "{}",
         .headers = &.{mk(tok.token)},
     });
@@ -1408,7 +1706,7 @@ test "handler contract: statistics/office/rtc/organization/third" {
 
     // /office/work_moment/add — publish a work moment
     const wm_body = try std.fmt.allocPrint(ctx.arena_ptr.allocator(), "{{\"userID\":\"{s}\",\"content\":\"hello moment\"}}", .{a});
-    var wm = try zigmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/office/work_moment/add", .{
+    var wm = try zmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/office/work_moment/add", .{
         .body = wm_body,
         .headers = &.{mk(tok.token)},
     });
@@ -1417,7 +1715,7 @@ test "handler contract: statistics/office/rtc/organization/third" {
 
     // /rtc-meeting/create — in-memory meeting room
     const rtc_body = try std.fmt.allocPrint(ctx.arena_ptr.allocator(), "{{\"hostUserID\":\"{s}\",\"meetingName\":\"x chat\"}}", .{a});
-    var rtc = try zigmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/rtc-meeting/create", .{
+    var rtc = try zmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/rtc-meeting/create", .{
         .body = rtc_body,
         .headers = &.{mk(tok.token)},
     });
@@ -1426,7 +1724,7 @@ test "handler contract: statistics/office/rtc/organization/third" {
     try std.testing.expect(std.mem.indexOf(u8, rtc.body, "\"roomID\"") != null);
 
     // /organization/info — org tree
-    var org = try zigmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/organization/info", .{
+    var org = try zmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/organization/info", .{
         .body = "{}",
         .headers = &.{mk(tok.token)},
     });
@@ -1446,7 +1744,7 @@ test "handler contract: statistics/office/rtc/organization/third" {
     };
     @import("modules/third.zig").initStorage(third_cfg, db_client, allocator);
     const fcm_body = try std.fmt.allocPrint(ctx.arena_ptr.allocator(), "{{\"userID\":\"{s}\",\"fcmToken\":\"fcm-xc-1\",\"platformID\":2}}", .{a});
-    var fcm = try zigmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/third/fcm_update_token", .{
+    var fcm = try zmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/third/fcm_update_token", .{
         .body = fcm_body,
         .headers = &.{mk(tok.token)},
     });
@@ -1486,7 +1784,7 @@ test "handler contract: user/group/conversation" {
     const b = try ctx.register("uc_b");
     const tok = try auth_mod.loginWithPassword(a, "test1234", 1);
     const mk = struct {
-        fn hdr(t: []const u8) zigmodu.http.Testkit.HeaderPair {
+        fn hdr(t: []const u8) zmodu.http.Testkit.HeaderPair {
             return .{ "token", t };
         }
     }.hdr;
@@ -1500,7 +1798,7 @@ test "handler contract: user/group/conversation" {
     }
 
     // /user/update_user_info — profile update
-    var up = try zigmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/user/update_user_info", .{
+    var up = try zmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/user/update_user_info", .{
         .body = try std.fmt.allocPrint(ctx.arena_ptr.allocator(), "{{\"userID\":\"{s}\",\"nickname\":\"UC Renamed\"}}", .{a}),
         .headers = &.{mk(tok.token)},
     });
@@ -1516,7 +1814,7 @@ test "handler contract: user/group/conversation" {
         core.getAllocator().free(gid.group_name);
         core.getAllocator().free(gid.creator_user_id);
     }
-    var gg = try zigmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/group/get_groups", .{
+    var gg = try zmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/group/get_groups", .{
         .body = try std.fmt.allocPrint(ctx.arena_ptr.allocator(), "{{\"userID\":\"{s}\",\"groupIDs\":[\"{s}\"]}}", .{ a, gid.group_id }),
         .headers = &.{mk(tok.token)},
     });
@@ -1534,11 +1832,96 @@ test "handler contract: user/group/conversation" {
     });
 
     // /conversation/get_conversation — single conversation lookup
-    var gc = try zigmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/conversation/get_conversation", .{
+    var gc = try zmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/conversation/get_conversation", .{
         .body = try std.fmt.allocPrint(ctx.arena_ptr.allocator(), "{{\"ownerUserID\":\"{s}\",\"conversationID\":\"sg_{s}\"}}", .{ a, gid.group_id }),
         .headers = &.{mk(tok.token)},
     });
     defer gc.deinit(kit_arena.allocator());
     try std.testing.expect(std.mem.indexOf(u8, gc.body, "\"errCode\":0") != null);
     try std.testing.expect(std.mem.indexOf(u8, gc.body, "\"conversationID\"") != null);
+}
+
+// ============================================================
+// zent migration slice 4 (core-domain pilot): conversations —
+// typed SaveOrUpdateOnWith upsert with GREATEST monotonic
+// expressions, sql_scan DTO reads (ConvRow i16 bridge for the
+// no-zero-tag enum), raw-by-design dynamic SET update
+// ============================================================
+test "zent: conversation upsert monotonic + read/update/delete" {
+    const allocator = std.testing.allocator;
+    var ctx = IntegrationCtx.init(allocator) orelse return;
+    defer ctx.deinit();
+
+    const zent_db = @import("zent_db.zig");
+    if (zent_db.getDriver() == null) {
+        std.log.warn("[zent] layer not initialized — skipping", .{});
+        return;
+    }
+
+    const db_mod = @import("modules/db_postgres.zig");
+    const conv_pers_mod = @import("modules/conversation/persistence.zig");
+    const conversation_mod = @import("modules/conversation.zig");
+    const core_mod = core;
+    const arena = ctx.arena_ptr.allocator();
+    const owner = try ctx.register("cnv_a");
+    const other = try ctx.register("cnv_b");
+    const conv_id = try std.fmt.allocPrint(arena, "si_{s}_zx{s}", .{ owner, other });
+
+    // Direct persistence handle: the plain-client arg routes upsertWithLatest
+    // to the zent SaveOrUpdateOnWith branch (production send paths pass a Tx
+    // and stay on the legacy branch until the TxClient migration).
+    var pers = conv_pers_mod.ConversationPersistence.init(arena, db_mod.getClient());
+
+    // 1) upsert inserts with the given seq + latest message
+    const t1 = core_mod.unixNowSeconds();
+    try pers.upsertWithLatest(db_mod.getClient(), owner, conv_id, 1, other, "", "msg v1", t1, other, 1, 5, 0);
+    var got = (try conversation_mod.getConversation(owner, conv_id)).?;
+    try std.testing.expectEqual(@as(i64, 5), got.max_seq);
+    try std.testing.expectEqualStrings("msg v1", got.latest_msg);
+    try std.testing.expectEqual(conversation_mod.ConversationType.single, got.conversation_type);
+    try std.testing.expect(!got.is_pinned);
+
+    // 2) monotonic upsert: lower seq must not regress max_seq, but the
+    //    latest-message fields advance (GREATEST upsert expressions)
+    try pers.upsertWithLatest(db_mod.getClient(), owner, conv_id, 1, other, "", "msg v2", t1 + 5, other, 1, 3, 0);
+    got = (try conversation_mod.getConversation(owner, conv_id)).?;
+    try std.testing.expectEqual(@as(i64, 5), got.max_seq);
+    try std.testing.expectEqualStrings("msg v2", got.latest_msg);
+    try std.testing.expect(got.update_time >= got.create_time);
+
+    // 3) group_at_type monotonicity: 3 then 2 → stays 3
+    try pers.upsertWithLatest(db_mod.getClient(), owner, conv_id, 1, other, "", "msg v3", t1 + 6, other, 1, 6, 3);
+    got = (try conversation_mod.getConversation(owner, conv_id)).?;
+    try std.testing.expectEqual(@as(i64, 6), got.max_seq);
+    try std.testing.expectEqual(@as(i16, 3), got.group_at_type);
+    try pers.upsertWithLatest(db_mod.getClient(), owner, conv_id, 1, other, "", "msg v4", t1 + 7, other, 1, 7, 2);
+    got = (try conversation_mod.getConversation(owner, conv_id)).?;
+    try std.testing.expectEqual(@as(i16, 3), got.group_at_type);
+
+    // 4) partial update (zent dynamic-SET path): pin + mute, seq untouched
+    _ = try conversation_mod.updateConversation(owner, conv_id, .{ .is_pinned = true, .recv_msg_opt = 2 });
+    got = (try conversation_mod.getConversation(owner, conv_id)).?;
+    try std.testing.expect(got.is_pinned);
+    try std.testing.expectEqual(@as(i16, 2), got.recv_msg_opt);
+    try std.testing.expectEqual(@as(i64, 7), got.max_seq);
+
+    // 5) updateSeq absolute set
+    try conversation_mod.updateSeq(owner, conv_id, 42);
+    got = (try conversation_mod.getConversation(owner, conv_id)).?;
+    try std.testing.expectEqual(@as(i64, 42), got.max_seq);
+
+    // 6) list reads (DTO scan with the i16 enum bridge)
+    const all = try conversation_mod.getConversationsByOwner(owner);
+    var found = false;
+    for (all) |c| {
+        if (std.mem.eql(u8, c.conversation_id, conv_id)) found = true;
+    }
+    try std.testing.expect(found);
+    const since = try conversation_mod.getConversationsByOwnerSince(owner, core_mod.unixNowSeconds() - 60);
+    try std.testing.expect(since.len >= 1);
+
+    // 7) typed count + delete (crud_helpers)
+    try std.testing.expect(conversation_mod.conversationCount() >= 1);
+    try std.testing.expect(try conversation_mod.deleteConversation(owner, conv_id));
+    try std.testing.expect((try conversation_mod.getConversation(owner, conv_id)) == null);
 }

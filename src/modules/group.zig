@@ -1,12 +1,12 @@
 const std = @import("std");
 const core = @import("core");
-const zigmodu = @import("zigmodu");
+const zmodu = @import("zmodu");
 const db_mod = @import("db_postgres.zig");
 const model = @import("group/model.zig");
 const persistence = @import("group/persistence.zig");
 const service = @import("group/service.zig");
 
-pub const info = zigmodu.api.Module{
+pub const info = zmodu.api.Module{
     .name = "group",
     .description = "Group chat - CRUD, member management, roles, applications",
     .dependencies = &.{ "user", "db_postgres" },

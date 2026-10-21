@@ -1,11 +1,11 @@
 const std = @import("std");
 const core = @import("core");
-const zigmodu = @import("zigmodu");
+const zmodu = @import("zmodu");
 const db_mod = @import("../db_postgres.zig");
 const config_mod = @import("../config.zig");
 const service = @import("service.zig");
 
-pub const info = zigmodu.api.Module{
+pub const info = zmodu.api.Module{
     .name = "crontask",
     .description = "Background cron tasks: message cleanup, webhook delivery, stats refresh",
     .dependencies = &.{ "db_postgres", "config", "third" },
@@ -80,7 +80,7 @@ fn crontaskLoop() void {
         }
 
         // 5-minute cadence, but in 1s slices so shutdown (g_running=false)
-        // is prompt. Uses zigmodu/Io-native sleep (std.Thread.sleep was
+        // is prompt. Uses zmodu/Io-native sleep (std.Thread.sleep was
         // removed in Zig 0.17; std.c.nanosleep did not actually sleep here).
         var remaining: u32 = 300;
         var slice: u32 = 0;

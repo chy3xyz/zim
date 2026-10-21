@@ -48,7 +48,7 @@ pub const ConversationService = struct {
         return result;
     }
 
-    pub fn delete(self: *ConversationService, owner_user_id: []const u8, conversation_id: []const u8) bool {
+    pub fn delete(self: *ConversationService, owner_user_id: []const u8, conversation_id: []const u8) !bool {
         const result = self.pers.delete(owner_user_id, conversation_id);
         if (result) {
             const eb = event_bus_mod.getEventBus();

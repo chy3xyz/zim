@@ -1,6 +1,6 @@
 const std = @import("std");
 const core = @import("core");
-const zigmodu = @import("zigmodu");
+const zmodu = @import("zmodu");
 const event_bus_mod = @import("../../modules/event_bus.zig");
 const model = @import("model.zig");
 const persistence = @import("persistence.zig");
@@ -18,8 +18,8 @@ pub const UserService = struct {
     pub fn create(self: *UserService, input: model.UserCreateInput) !model.User {
         var password_hash: []const u8 = "";
         if (input.password) |pwd| {
-            // zigmodu.security.PasswordEncoder — PBKDF2-HMAC-SHA256, 100k iterations
-            var encoder = zigmodu.security.PasswordEncoder.init(self.allocator);
+            // zmodu.security.PasswordEncoder — PBKDF2-HMAC-SHA256, 100k iterations
+            var encoder = zmodu.security.PasswordEncoder.init(self.allocator, core.getIo());
             password_hash = try encoder.encode(pwd);
         }
         const user = try self.pers.create(input, password_hash);
@@ -139,7 +139,9 @@ pub const UserService = struct {
         if (user == null) return false;
         if (user.?.password_hash.len == 0) return false;
 
-        var encoder = zigmodu.security.PasswordEncoder.init(core.getAllocator());
-        return encoder.matches(password, user.?.password_hash);
+        var encoder = zmodu.security.PasswordEncoder.init(core.getAllocator(), core.getIo());
+        // MalformedStoredHash (corrupt row) reads as "no match" — auth fails
+        // closed rather than erroring the login path.
+        return encoder.matches(password, user.?.password_hash) catch false;
     }
 };

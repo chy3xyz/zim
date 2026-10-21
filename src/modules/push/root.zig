@@ -1,9 +1,9 @@
 const std = @import("std");
 const core = @import("core");
-const zigmodu = @import("zigmodu");
+const zmodu = @import("zmodu");
 const service = @import("service.zig");
 
-pub const info = zigmodu.api.Module{
+pub const info = zmodu.api.Module{
     .name = "push",
     .description = "Push notification worker - online filter, DND filter, FCM/APNs offline push queue",
     .dependencies = &.{

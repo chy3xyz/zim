@@ -1,5 +1,7 @@
 const std = @import("std");
 const db_mod = @import("../../modules/db_postgres.zig");
+const zent = @import("zent");
+const zent_db = @import("../../zent_db.zig");
 const model = @import("model.zig");
 
 fn rowToUser(allocator: std.mem.Allocator, row: []const []const u8) !model.User {
@@ -237,6 +239,19 @@ pub const UserPersistence = struct {
 
     /// Per-day registration counts within [start_time, end_time], oldest first.
     pub fn countByDay(self: *UserPersistence, allocator: std.mem.Allocator, start_time: i64, end_time: i64) ![]model.DayCount {
+        // zent path (preferred): DTO scanning by column name replaces the
+        // hand-written row loop; falls back to db_postgres when the zent
+        // layer is down (docs/zent-migration.md).
+        if (zent_db.getDriver()) |drv| {
+            var rows = try zent.sql_scan.queryAll(
+                model.DayCount,
+                allocator,
+                drv,
+                "SELECT to_char(create_time AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day, COUNT(*) AS count FROM users WHERE EXTRACT(EPOCH FROM create_time)::bigint >= $1 AND EXTRACT(EPOCH FROM create_time)::bigint <= $2 GROUP BY 1 ORDER BY 1",
+                &.{ .{ .int = start_time }, .{ .int = end_time } },
+            );
+            return rows.toOwnedSlice();
+        }
         const sql = "SELECT to_char(create_time AT TIME ZONE 'UTC', 'YYYY-MM-DD'), COUNT(*) FROM users WHERE EXTRACT(EPOCH FROM create_time)::bigint >= $1 AND EXTRACT(EPOCH FROM create_time)::bigint <= $2 GROUP BY 1 ORDER BY 1";
         const params = &[_]db_mod.QueryParam{ .{ .bigint = start_time }, .{ .bigint = end_time } };
         const result = try self.db.queryParams(sql, params);

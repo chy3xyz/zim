@@ -1,10 +1,10 @@
 const std = @import("std");
 const core = @import("core");
-const zigmodu = @import("zigmodu");
+const zmodu = @import("zmodu");
 const db_mod = @import("../db_postgres.zig");
 const model = @import("model.zig");
 
-pub const info = zigmodu.api.Module{
+pub const info = zmodu.api.Module{
     .name = "gateway",
     .description = "HTTP + WebSocket gateway for client communication",
     .dependencies = &.{ "config", "auth", "user" },
@@ -53,15 +53,15 @@ pub fn generateRoomID(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 // --------------------------------------------
-// Health (zigmodu HealthEndpoint)
+// Health (zmodu HealthEndpoint)
 // --------------------------------------------
-var g_health: ?zigmodu.HealthEndpoint = null;
+var g_health: ?zmodu.HealthEndpoint = null;
 
-fn livenessCheck(_: ?*anyopaque) zigmodu.HealthEndpoint.HealthStatus {
+fn livenessCheck(_: ?*anyopaque) zmodu.HealthEndpoint.HealthStatus {
     return .UP;
 }
 
-fn databaseHealthCheck(ctx: ?*anyopaque) zigmodu.HealthEndpoint.HealthStatus {
+fn databaseHealthCheck(ctx: ?*anyopaque) zmodu.HealthEndpoint.HealthStatus {
     const client = ctx orelse return .DOWN;
     const db: *db_mod.PostgresClient = @ptrCast(@alignCast(client));
     return if (db.connected) .UP else .DOWN;
@@ -69,7 +69,7 @@ fn databaseHealthCheck(ctx: ?*anyopaque) zigmodu.HealthEndpoint.HealthStatus {
 
 pub fn ensureHealth() void {
     if (g_health != null) return;
-    var endpoint = zigmodu.HealthEndpoint.init(core.getGlobalAllocator());
+    var endpoint = zmodu.HealthEndpoint.init(core.getGlobalAllocator());
     endpoint.registerCheck("liveness", "ZIM process is alive", livenessCheck) catch {};
     if (db_mod.isInitialized()) {
         endpoint.registerCheckWithContext("database", "PostgreSQL connectivity", databaseHealthCheck, db_mod.getClient()) catch {};

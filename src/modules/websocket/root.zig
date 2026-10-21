@@ -1,5 +1,5 @@
 const std = @import("std");
-const zigmodu = @import("zigmodu");
+const zmodu = @import("zmodu");
 const core = @import("core");
 const config_mod = @import("../config.zig");
 const auth_mod = @import("../auth.zig");
@@ -47,7 +47,7 @@ pub fn shouldKickOld(policy: u8, existing_platform: i32, new_platform: i32, same
     }
 }
 
-pub const info: zigmodu.api.Module = .{
+pub const info: zmodu.api.Module = .{
     .name = "websocket",
     .description = "WebSocket server for real-time IM communication",
     .dependencies = &.{ "config", "auth", "event_bus" },
@@ -158,30 +158,35 @@ pub fn deinit() void {
 }
 
 // ============================================================
-// zigmodu http.Server + ws_routes transport (replaces the custom
+// zmodu http.Server + ws_routes transport (replaces the custom
 // hand-rolled WebSocket server). The protocol layer below
 // (handleClientMessage / handleClientMessageBinary and friends)
-// is unchanged; only frame transport is delegated to zigmodu.
+// is unchanged; only frame transport is delegated to zmodu.
 // ============================================================
 
-var g_ws_server: ?zigmodu.http.Server = null;
+var g_ws_server: ?zmodu.http.Server = null;
 var g_ws_thread: ?std.Thread = null;
 
 pub fn startServer(io: std.Io, allocator: std.mem.Allocator, port: u16) !void {
-    g_ws_server = zigmodu.http.Server.init(io, allocator, port);
+    g_ws_server = zmodu.http.Server.init(io, allocator, port);
     var server = &g_ws_server.?;
-    var group = server.group("");
-    try group.ws("", onConnect, onMessage, onClose, null);
+    // zmodu v0.40 removed Server.group()/RouteGroup — runtime WS registration
+    // now rides the ComptimeRouter Scoped face (catalog unused for ws routes).
+    const WsState = struct {};
+    var ws_state = WsState{};
+    var router = zmodu.http.Router(WsState).init(io, allocator, server, &ws_state);
+    var scoped = router.scope("");
+    try scoped.ws("", onConnect, onMessage, onClose, null);
     g_ws_thread = try server.runInBackground();
-    std.log.info("WebSocket server started on ws://0.0.0.0:{d} (zigmodu ws_routes)", .{port});
+    std.log.info("WebSocket server started on ws://0.0.0.0:{d} (zmodu ws_routes)", .{port});
 }
 
 /// Handshake auth: `ws://host:port/?sendID=xxx&token=xxx&platformID=n`
 /// Creates a heap-allocated WSClient (destroyed in onClose) and registers it
 /// in the global client registry. Returns the client as the session pointer.
-fn onConnect(ctx: *zigmodu.http.Context, framer: *anyopaque) ?*anyopaque {
+fn onConnect(ctx: *zmodu.http.Context, framer: *anyopaque) ?*anyopaque {
     // Per-IP handshake rate limit — reject floods before token work.
-    const client_ip = zigmodu.http.RequestUtil.getRealIp(ctx);
+    const client_ip = zmodu.http.RequestUtil.getRealIp(ctx);
     if (!allowHandshake(client_ip)) {
         std.log.warn("[WebSocket] Handshake rate-limited for {s}", .{client_ip});
         return null;
@@ -235,7 +240,7 @@ fn onConnect(ctx: *zigmodu.http.Context, framer: *anyopaque) ?*anyopaque {
                 defer core.getAllocator().free(kick_msg);
                 existing.sendText(kick_msg) catch {};
                 if (existing.framer) |f| {
-                    const fr: *zigmodu.im.WsFramer = @ptrCast(@alignCast(f));
+                    const fr: *zmodu.im.WsFramer = @ptrCast(@alignCast(f));
                     fr.writeClose() catch {};
                 }
                 core.metricWsConnectionDelta(-1);
@@ -274,7 +279,7 @@ fn onConnect(ctx: *zigmodu.http.Context, framer: *anyopaque) ?*anyopaque {
     return client;
 }
 
-fn onMessage(session: ?*anyopaque, msg: []const u8, kind: zigmodu.im.WsFrameKind) void {
+fn onMessage(session: ?*anyopaque, msg: []const u8, kind: zmodu.im.WsFrameKind) void {
     const client: *WSClient = @ptrCast(@alignCast(session orelse return));
     switch (kind) {
         .text => {
@@ -830,7 +835,7 @@ pub fn kickUser(user_id: []const u8, reason: []const u8) void {
         for (clients.items) |client| {
             model.sendWSResponse(client, model.WSKickOnlineMsg, "", "", 0, reason, &[_]u8{});
             if (client.framer) |f| {
-                const fr: *zigmodu.im.WsFramer = @ptrCast(@alignCast(f));
+                const fr: *zmodu.im.WsFramer = @ptrCast(@alignCast(f));
                 fr.writeClose() catch {};
             }
         }

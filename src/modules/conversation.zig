@@ -1,6 +1,6 @@
 const std = @import("std");
 const core = @import("core");
-const zigmodu = @import("zigmodu");
+const zmodu = @import("zmodu");
 const db_mod = @import("db_postgres.zig");
 
 pub const model = @import("conversation/model.zig");
@@ -15,7 +15,7 @@ pub const ConversationUpdateInput = model.ConversationUpdateInput;
 pub const VersionKey = model.VersionKey;
 pub const ConversationStorage = persistence.ConversationPersistence;
 
-pub const info = zigmodu.api.Module{
+pub const info = zmodu.api.Module{
     .name = "conversation",
     .description = "Conversation management - CRUD, participants, seq tracking",
     .dependencies = &.{ "user", "db_postgres" },
@@ -60,7 +60,7 @@ pub fn updateConversation(owner_user_id: []const u8, conversation_id: []const u8
     return svc().update(owner_user_id, conversation_id, input);
 }
 
-pub fn deleteConversation(owner_user_id: []const u8, conversation_id: []const u8) bool {
+pub fn deleteConversation(owner_user_id: []const u8, conversation_id: []const u8) !bool {
     return svc().delete(owner_user_id, conversation_id);
 }
 

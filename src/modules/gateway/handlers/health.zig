@@ -3,8 +3,8 @@
 // File: health.zig
 
 const core = @import("core");
-const zigmodu = @import("zigmodu");
-const http = zigmodu.http;
+const zmodu = @import("zmodu");
+const http = zmodu.http;
 const gw_root = @import("../root.zig");
 const GatewayRoutes = @import("../handlers.zig").GatewayRoutes;
 

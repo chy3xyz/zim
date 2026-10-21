@@ -4,19 +4,30 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    // Add zigmodu dependency
-    const zigmodu_dep = b.dependency("zigmodu", .{
+    // Add zmodu dependency (formerly zmodu)
+    const zmodu_dep = b.dependency("zmodu", .{
         .target = target,
         .optimize = optimize,
     });
 
-    // Translate libpq C header -> Zig module (Zig 0.17 removed the @cImport builtin)
+    // Add zent dependency (ORM layer, PostgreSQL via libpq)
+    const zent_dep = b.dependency("zent", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // Translate libpq C header -> Zig module (Zig 0.17 removed the @cImport builtin).
+    // Include dir discovery mirrors zent/build.zig: pg_config first (Linux
+    // distros, Homebrew Postgres), Homebrew keg fallback second — no hardcoded
+    // machine-specific path.
     const pg_translate = b.addTranslateC(.{
         .root_source_file = b.path("modules/db_postgres/libpq_include.h"),
         .target = target,
         .optimize = optimize,
     });
-    pg_translate.addSystemIncludePath(.{ .cwd_relative = "/opt/homebrew/opt/libpq/include" });
+    if (discoverLibpqIncludeDir(b)) |inc| {
+        pg_translate.addSystemIncludePath(.{ .cwd_relative = inc });
+    }
     const libpq_mod = pg_translate.createModule();
 
     // Create executable
@@ -29,15 +40,16 @@ pub fn build(b: *std.Build) void {
         }),
     });
 
-    // Import zigmodu
-    exe.root_module.addImport("zigmodu", zigmodu_dep.module("zigmodu"));
+    // Import zmodu
+    exe.root_module.addImport("zmodu", zmodu_dep.module("zmodu"));
     exe.root_module.addImport("libpq", libpq_mod);
+    exe.root_module.addImport("zent", zent_dep.module("zent"));
 
     // Import core infrastructure module
     const core_module = b.createModule(.{
         .root_source_file = b.path("core.zig"),
     });
-    core_module.addImport("zigmodu", zigmodu_dep.module("zigmodu"));
+    core_module.addImport("zmodu", zmodu_dep.module("zmodu"));
     exe.root_module.addImport("core", core_module);
 
     // Import protobuf codec
@@ -75,11 +87,12 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .root_source_file = b.path("tests.zig"),
     });
-    tests_mod.addImport("zigmodu", zigmodu_dep.module("zigmodu"));
+    tests_mod.addImport("zmodu", zmodu_dep.module("zmodu"));
     tests_mod.addImport("libpq", libpq_mod);
     tests_mod.addImport("core", core_module);
     tests_mod.addImport("protobuf", proto_module);
     tests_mod.addImport("sdkws", sdkws_module);
+    tests_mod.addImport("zent", zent_dep.module("zent"));
     const tests_tests = b.addTest(.{ .root_module = tests_mod });
 
     const test_step = b.step("test", "Run unit tests");
@@ -98,7 +111,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .root_source_file = b.path("bench.zig"),
     });
-    bench_mod.addImport("zigmodu", zigmodu_dep.module("zigmodu"));
+    bench_mod.addImport("zmodu", zmodu_dep.module("zmodu"));
     bench_mod.addImport("libpq", libpq_mod);
     bench_mod.addImport("core", core_module);
     bench_mod.addImport("protobuf", proto_module);
@@ -108,4 +121,40 @@ pub fn build(b: *std.Build) void {
     bench_run.step.dependOn(b.getInstallStep());
     const bench_step = b.step("bench", "Run in-process benchmark (needs PostgreSQL)");
     bench_step.dependOn(&bench_run.step);
+}
+
+// ── libpq include-dir discovery ─────────────────────────────────
+// Same strategy as zent/build.zig: pg_config (Linux distros, Homebrew
+// Postgres), then the Homebrew keg fallback. Returns null when nothing is
+// found so configure still succeeds on exotic setups (compile fails later
+// with a clear libpq-fe.h error instead).
+fn discoverLibpqIncludeDir(b: *std.Build) ?[]const u8 {
+    if (execOutput(b, &.{ "pg_config", "--includedir" })) |inc| {
+        const header = std.fs.path.join(b.allocator, &.{ inc, "libpq-fe.h" }) catch return null;
+        if (pathExists(b, header)) return inc;
+    }
+    // `libpq` is the keg-only brew formula; postgresql@N keeps the header
+    // under a versioned prefix (plain or `<prefix>/postgresql/` subdir).
+    const versions = [_][]const u8{ "postgresql@18", "postgresql@17", "postgresql@16", "postgresql@15", "postgresql@14", "postgresql", "libpq" };
+    const homes = [_][]const u8{ "/opt/homebrew/opt", "/usr/local/opt" };
+    for (homes) |home| {
+        for (versions) |pkg| {
+            const versioned = b.fmt("{s}/{s}/include/{s}/libpq-fe.h", .{ home, pkg, pkg });
+            const plain = b.fmt("{s}/{s}/include/libpq-fe.h", .{ home, pkg });
+            const header = if (pathExists(b, versioned)) versioned else if (pathExists(b, plain)) plain else continue;
+            return std.fs.path.dirname(header).?;
+        }
+    }
+    return null;
+}
+
+fn execOutput(b: *std.Build, argv: []const []const u8) ?[]const u8 {
+    const result = std.process.run(b.allocator, b.graph.io, .{ .argv = argv }) catch return null;
+    if (!result.term.success()) return null;
+    return std.mem.trim(u8, result.stdout, " \n\r\t");
+}
+
+fn pathExists(b: *std.Build, path: []const u8) bool {
+    std.Io.Dir.accessAbsolute(b.graph.io, path, .{}) catch return false;
+    return true;
 }

@@ -31,7 +31,7 @@ pub const OpCode = enum(u4) {
 // Client connection
 pub const WSClient = struct {
     stream: std.Io.net.Stream,
-    /// zigmodu WsFramer pointer — set for zigmodu-managed connections.
+    /// zmodu WsFramer pointer — set for zmodu-managed connections.
     /// When set, all frame writes go through the framer (text/binary aware).
     framer: ?*anyopaque = null,
     user_id: []const u8 = "",
@@ -50,7 +50,7 @@ pub const WSClient = struct {
 
     pub fn sendFrame(self: *WSClient, opcode: u8, payload: []const u8) !void {
         if (self.framer) |f| {
-            const framer: *@import("zigmodu").im.WsFramer = @ptrCast(@alignCast(f));
+            const framer: *@import("zmodu").im.WsFramer = @ptrCast(@alignCast(f));
             if (opcode == 0x2) return framer.writeBinary(payload);
             return framer.writeText(payload);
         }
@@ -78,7 +78,7 @@ pub const WSClient = struct {
     }
 
     pub fn close(self: *WSClient) void {
-        // zigmodu's connection fiber owns the socket; it closes on disconnect.
+        // zmodu's connection fiber owns the socket; it closes on disconnect.
         if (self.framer != null) return;
         self.stream.close(g_io);
     }

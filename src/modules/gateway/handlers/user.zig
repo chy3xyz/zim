@@ -4,8 +4,8 @@
 
 const std = @import("std");
 const core = @import("core");
-const zigmodu = @import("zigmodu");
-const http = zigmodu.http;
+const zmodu = @import("zmodu");
+const http = zmodu.http;
 const user_mod = @import("../../user.zig");
 const dto = @import("../dto.zig");
 const GatewayRoutes = @import("../handlers.zig").GatewayRoutes;

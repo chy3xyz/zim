@@ -4,8 +4,8 @@
 
 const std = @import("std");
 const core = @import("core");
-const zigmodu = @import("zigmodu");
-const http = zigmodu.http;
+const zmodu = @import("zmodu");
+const http = zmodu.http;
 const ws_module = @import("../../websocket.zig");
 const model = @import("../model.zig");
 const gw_root = @import("../root.zig");

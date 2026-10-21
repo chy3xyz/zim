@@ -4,8 +4,13 @@
     .fingerprint = 0x211bf99f45fc944e,
     .minimum_zig_version = "0.16.0",
     .dependencies = .{
-        .zigmodu = .{
+        .zmodu = .{
             .path = "../../../zig_ws/zigmodu",
+            .fingerprint = 0xde7987a02b121580,
+        },
+        .zent = .{
+            .path = "../../../zig_ws/zent",
+            .fingerprint = 0xc7cc6523fbab2ba2,
         },
     },
     .paths = .{
@@ -13,5 +18,7 @@
         "build.zig.zon",
         "main.zig",
         "modules/",
+        "zent_db.zig",
+        "zent_schemas.zig",
     },
 }

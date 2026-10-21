@@ -1,6 +1,6 @@
 const std = @import("std");
 const core = @import("core");
-const zigmodu = @import("zigmodu");
+const zmodu = @import("zmodu");
 const config_mod = @import("config.zig");
 const db_mod = @import("db_postgres.zig");
 
@@ -14,7 +14,7 @@ pub const LoginInput = model.LoginInput;
 pub const RegisterInput = model.RegisterInput;
 pub const AuthModule = service.AuthService;
 
-pub const info = zigmodu.api.Module{
+pub const info = zmodu.api.Module{
     .name = "auth",
     .description = "JWT authentication - login, register, token management",
     .dependencies = &.{ "user", "config", "db_postgres" },
@@ -81,8 +81,8 @@ pub fn sendVerificationCode(phone_number: ?[]const u8, email: ?[]const u8, area_
     return svc().sendVerificationCode(phone_number, email, area_code);
 }
 
-pub fn verifyCode(phone_number: ?[]const u8, email: ?[]const u8, code: []const u8) bool {
-    return svc().verifyCode(phone_number, email, code);
+pub fn verifyCode(phone_number: ?[]const u8, email: ?[]const u8, area_code: ?[]const u8, code: []const u8) bool {
+    return svc().verifyCode(phone_number, email, area_code, code);
 }
 
 pub fn resetPassword(user_id: []const u8, new_password: []const u8) !bool {

@@ -240,6 +240,85 @@ Edit `config/config.yaml`:
 - **横幅**：main.zig Framework: zigmodu v0.15.22；CI zigmodu ref 更新 v0.15.22
 - **端到端**：v0.15.22 后端 + flutter zim_sdk 集成测试全过（数据打通持续验证）
 
+## Phase 76: zigmodu v0.15.22 → v0.15.36 升级 + zent ORM 接入试点
+
+- **zigmodu v0.15.36 升级**（本地 `zig_ws/zigmodu` 已被用户更新至 66b4b06=v0.15.36，含 1 个向后兼容本地补丁：`Middleware.zig` moduleGate `skip_prefixes` 可配置化，默认行为不变）：v0.15.22..v0.15.36 共 42 commits（accept 循环 concurrent 派发修复 keep-alive 挂死、stop 前 shutdown listener 修复、EventBus/DI 接入 Application、sqlx 读写分离、可插拔 AuthBackend、`bindJsonLoose`/`extractJsonLoose` camelCase+null 容错等）——**API 面兼容零代码改动**；横幅/启动 JSON/CI ref 三处版本号更新；实测 zig build + 32/32 测试 + `scripts/ci.sh` 6/6 全绿
+- **zent v0.34.0 接入试点**（评估结论：可行，zent=数据层 ORM 与 zigmodu=应用框架正交，`zmshop_zent` 为参考实现；详见 `docs/zent-migration.md`）：
+  - 依赖：`build.zig.zon` 加 `zent` path 依赖（fingerprint 0xc7cc6523fbab2ba2）；`build.zig` exe+tests 模块 `addImport("zent",...)`（libpq 链接复用 zigmodu sqlx 已有的 `-lpq`，头文件 discovery 由 zent 自己的 build 完成）
+  - 新文件：`zent_schemas.zig`（users 表 Schema-as-Code 映射，SELECT 按列生成、未声明列不触碰）+ `zent_db.zig`（`ConnPool(PostgresDriver)` min1/max4 + `health_check_on_borrow=false`（zmshop 踩坑：ping-under-mutex 死锁）+ 配置串 dupe 防 config 热加载悬空 + client 持有 + `deinitRow` 内存契约助手）
+  - main.zig：`app.start()` 后初始化，**非致命**（失败仅 JSON 告警，db_postgres 仍是权威路径）；停机 LIFO 先关 zent 池；实测启动日志 `zent ORM layer ready (pilot: users)`
+  - 测试：新增双向互通集成测试——zent `crud_helpers` create/update/first/delete ↔ `user.getUser` 交叉读写同一 users 表（String 主键 user_id；踩坑：`entity_info` 是类型级声明须经 `@TypeOf(client.user).entity_info` 访问、局部变量名 `u2` 遮蔽 Zig 原生类型），测试后 DB 0 残留；**33/33 全过、CI 6/6 全绿**
+- 后续迁移路线（只读域 → 低冲突 CRUD 表 → 核心域事务）见 `docs/zent-migration.md`
+
+## Phase 77: zent 第一批迁移切片 + CI 可移植性修复
+
+- **zent 迁移切片 1**（模式：双路径回退 —— `zent_db.getClient()/getDriver()` 优先，层不可用走 legacy db_postgres，零行为变化；详见 docs/zent-migration.md「迁移模式」）：
+  - `collects` 全 CRUD：`addCollect`/`getCollects` → `zent.sql_scan.queryOne/queryAll`（INSERT..RETURNING / 动态 IN 子句，计算列加别名后按列名直接扫进 `model.Collect`，无中间 DTO）；`removeCollect` → `crud_helpers.delete`（Collect schema，id+user_id 双谓词保持归属校验）
+  - 统计聚合 4 处手工行解析（dupe+parseInt+freeResult 循环，Phase 60 UAF 高发区）→ `sql_scan.queryAll`：`user.countByDay`、`group.countByDay`、`message.activeDateCount`、`message.activeTopEntities`（JOIN 查询列别名对齐 TopEntity 字段）
+  - `zent_schemas.zig` 加 Collect schema（UUID pk；create_time TIMESTAMPTZ 不入实体 —— epoch 读经 RETURNING/SELECT EXTRACT）；`zent_db.zig` 加 `getDriver()`
+  - 测试基建：`IntegrationCtx.init` 在 PG 可用时同步初始化 zent 层（全部集成测试自动走 zent 路径，不再静默回退），deinit 幂等；新增 collects 服务层测试（含归属校验：他人行不可删）；**34/34 全过、DB 0 残留、CI 6/6 全绿**
+- **zigmodu 本地补丁 2**：`ModuleGraph.zig` findCycle 加 `@setEvalBranchQuota(100_000)`（comptime 环检测 O(modules²·name_len) 超默认 1000 分支预算，17 模块图在重编译时触发；向后兼容、可上游）
+- **CI 可移植性**（此前 GitHub CI 从未跑过，workflow 有多处环境错误）：
+  - `src/build.zig` libpq include 从硬编码 `/opt/homebrew/opt/libpq/include` 改为发现式（pg_config → Homebrew keg 回退，同 zent build.zig 模式）—— Linux/macOS 通用
+  - workflow 重写：zig 改为 ziglang.org 直连 tarball（setup-zig 对 dev 版 404，同 zigmodu CI 模式，pin dev.1970）；补 `apt-get libpq-dev` + zent v0.34.0 checkout（两个 job）；frontend job 补 PG service（e2e 需要）+ zig 安装（原来缺失）；修复 e2e 步骤硬编码 `/Users/runner` macOS 路径 → 相对路径；`kill %1` 跨 step 无效 → `pkill -f`；fmt 清单补 zent_db/zent_schemas（ci.yml 与 scripts/ci.sh 同步）
+- **清理**：删除 `src/modules/gateway.zig.bak`（Phase 49 拆分遗留，git 跟踪的死文件）
+
+## Phase 78: zent 迁移切片 2 — auth/third 全量低冲突表
+
+- **迁移范围**（沿用 Phase 77 双路径回退模式，零行为变化）：
+  - `auth_tokens`：`storeToken`/`deleteByUser` → `drv.exec`（expire_time 为 `NOW()+INTERVAL` SQL 计算列）；`parseToken` → `sql_scan.queryOne(TokenInfo)`（EXTRACT 加别名按列名扫进模型）
+  - `auth_verification_codes`：60s 限流检查 → `queryOne(bool DTO, CASE..AS recent)`；upsert 与一次性消费 DELETE → `drv.exec`；`checkVerificationCode` → `queryOne` + `freeDto` 显式释放一次性 DTO
+  - `fcm_tokens`/`app_logs`/`webhook_events`（third 模块）：写入（含 NOW() 计算列的 upsert/INSERT/UPDATE）→ `drv.exec`；`getFCMToken`/`getPendingWebhookEvents` → `sql_scan.queryOne/queryAll`
+- **写语句选型确立**：含 SQL 计算列的语句走 `drv.exec(原 SQL, args)`（语义零变化、无需实体 schema）；纯谓词删除/更新才引入 schema 走 `crud_helpers`（见 docs/zent-migration.md「迁移模式」）
+- **测试**：新增 token 生命周期（login→parseToken→forceLogout→InvalidToken）、验证码（60s 限流/错码不消费/正码一次性消费/消费后可重发）、FCM（(user,platform) upsert 覆盖 + 跨平台隔离）、webhook（queue→pending→delivered）单测；**35/35 全过、CI 6/6 全绿、Flutter e2e 全过**（登录链路 storeToken/parseToken 现走 zent pool，真实 HTTP/WS 验证）
+- 发现保留（未改，零行为变化原则）：`checkVerificationCode` 的手机号 key 硬编码空 area_code（`":phone"`）而 `createVerificationCode` 用 `area_code orelse ""` —— 非空 area_code 发码后 verify 永远对不上，属既有 bug，修复需评估 handler 调用方，记为后续
+
+## Phase 79: area_code 验证码 bug 修复 + office 全量迁移（低冲突层收尾）
+
+- **area_code bug 修复**（Phase 78 发现的既有 bug）：verify 链路把 areaCode 丢了 —— handler `VerifyCodeReq` 无 areaCode 字段、`auth.verifyCode`/`service.verifyCode`/`checkVerificationCode` 均无参数，key 硬编码 `":phone"`，而 send 用 `"{areaCode}:{phone}"` → 带区号发码永远验证失败。修复：四层线程化（handler 请求结构加 areaCode → wrapper → service → persistence key 构造统一 `area_code orelse ""`），新增回归测试（"+86 手机号发码→验证成功"，修复前必挂）
+- **office 全量迁移到 zent**（沿用双路径回退，零行为变化）：
+  - 工作圈读路径（4 处 12 列 JOIN 查询 get/getRecvList/getSendList/findRelevant）→ `sql_scan.queryAll(model.WorkMoment)`（别名对齐后按列名直扫）；create → `queryOneLenient`（RETURNING 无 JOIN 列，缺席 face_url/nickname 保持 ""）
+  - 点赞/取消赞/评论/删评论/清已读（JSONB 追加与数组过滤更新、user_read_times upsert）→ `drv.exec`；unread/recvCount → `queryOne({count:i64})`；getUserReadTime → `queryOne(?i64 DTO)`（NULL 安全）
+  - tags CRUD：`TagRow` DTO 中转（model.Tag 的 user_id_list 非列字段）+ tag_members 子查询填充成员；字符串所有权转移给返回值（只释放列表缓冲）
+  - clientConfig → `queryOne(model.ClientConfig)`，错误/空行回退默认值
+- **踩坑（已记 docs/zent-migration.md）**：①zent 驱动不带类型 OID，`jsonb_build_object('k', $N)` 的 any 形参令 PG 报 `could not determine data type` → zent 分支裸参数加 `$N::text`/`$N::bigint` 显式转型；②PG jsonb 文本输出在冒号后带空格（`"userID": "x"`），断言搜索勿用无空格格式；③`Managed.deinit()/toOwnedSlice()` 均为 0 参（Managed 自带 allocator）
+- **测试**：新增工作圈全生命周期（发圈→JOIN 读→点赞幂等→评论→双方 unread→清已读→收/发/相关列表→标签建改删成员）+ area_code 回归，**37/37 全过、CI 6/6 全绿、Flutter e2e 全过**
+
+## Phase 80: zent 迁移切片 4 — conversation 全量（核心域第一片，最佳实践对齐）
+
+- **迁移范围**（对照 zent docs/BEST_PRACTICES.md 决策表逐方法选型）：
+  - **typed 旗舰**：`upsertWithLatest` → `SaveOrUpdateOnWith(&.{"owner_user_id","conversation_id"}, exprs)` —— UNIQUE 业务键冲突目标，max_seq/group_at_type 单调列用 `GREATEST({t:col},{x:col})` 模板、update_time 用 `NOW()` expr；**comptime 类型守卫** `@TypeOf(exec) == *db_mod.PostgresClient`（生产调用全 Tx-bound 留 legacy，事务原子性不混池；zent 分支待 TxClient 迁移激活，测试以 plain client 直调覆盖）
+  - **typed builder**：`delete` → `crud_helpers.delete`（双谓词）；`count` → `q.Count()`
+  - **raw-by-design**（§1 决策表钦定）：`update`（动态 SET + 非 schema 的 update_time 列）与 `updateSeq` → `drv.exec` 原语句过 zent 池；`get`/`getByOwner`/`getByOwnerSince`/`getEncryptionKeys` → `sql_scan` DTO（EXTRACT epoch 表达式投影）；`genEncryptionKey` → queryOne(MAX) + drv.exec
+  - **保留 legacy**：`upsertWithLatestBatch`（仅 Tx-bound 调用，批量分块语句留待 TxClient）、`create`（INSERT..RETURNING 无变化需求，惰性）
+- **新增 schema**：`Conversation`（22 列；create_time/update_time/latest_msg_destruct_time TIMESTAMPTZ 不入实体）
+- **踩坑（记入 zent-migration.md「BEST_PRACTICES 对齐」节）**：①`sql_scan` comptime zeroInit 无法处理无 0 tag 的 enum（ConversationType 从 1 起）→ `ConvRow` i16 中转 DTO + `@enumFromInt` 物化；②`setFieldValue` 类型精确匹配（i16 → `@as(i64, v)`）；③typed `setExprArgs` 对非 schema 列报 UnknownField —— 动态 SET 走 raw 是文档钦定边界而非妥协；④**惰性编译翻出既有 bug**：`ConversationService.delete` bool 签名 + `try` 函数体从未编译（无调用方），首次测试调用即暴露 → 修为 `!bool`（module wrapper 同步）
+- **测试**：新增 conversation 生命周期（upsert 插入→**低 seq 不回退**（GREATEST 单调）→latest_msg 前进→group_at_type 3 压 2→部分更新不触 seq→updateSeq 绝对值→列表/增量读（ConvRow 桥）→count→delete）；**38/38 全过、CI 6/6 全绿、Flutter e2e 全过**（get_sorted_conversation_list 会话列表经 zent 路径服务真实 SDK）
+
+## Phase 81: zigmodu v0.15.36 → v0.39.11 + zent v0.34.0 → v0.91.0 双升级适配
+
+- **zigmodu v0.39.11 适配**（4 处 fallible 化 API）：
+  - `http_middleware.securityHeaders(null)` → 返回 `error{OutOfMemory}!Middleware`（加 try）
+  - `http.openApiFromCatalog(&g_slot, cfg)` → 返回 `error{SlotPoolExhausted}!HandlerFn`（startHttpServer 内 catch 返回）
+  - `security.PasswordEncoder.init(allocator)` → `init(allocator, io)`（`core.getIo()` 接线；auth/user service 3 处）
+  - `PasswordEncoder.matches` → 返回 `error{MalformedStoredHash,OutOfMemory}!bool`（verifyPassword `catch false`，坏 hash 行按"不匹配"处理 —— auth fail-closed）
+  - zigmodu 此前 2 个本地补丁（moduleGate skip_prefixes、ModuleGraph findCycle 配额）已并入上游 tag；本地 HEAD c28ab42 = v0.39.11+5（CI pin v0.39.11 tag，兼容范围内）
+- **zent v0.91.0 适配**（1 处策略变化）：**文本主键必须调用方提供**（v0.84+ 跨方言一致性政策：PG 拒绝 NULL 而 SQLite 接受 → RETURNING 拿回 NULL）—— conversation zent upsert 分支补 `generateUuidV4`（OS CSPRNG + RFC 4122 v4 位）显式设 id，upsert 表达式加 `{t:id}` 冲突时保留旧 id（legacy 分支仍走表默认 uuid_generate_v4()，行为不变）；其余 API（ConnPool/PostgresDriver/sql_scan/crud_helpers/SaveOrUpdateOnWith/deinitEntity）零改动兼容
+- **验证**：38/38 测试全过、CI 6/6 全绿、冒烟启动横幅 `zigmodu v0.39.11` + `zent ORM layer ready`；**Flutter e2e 本轮未跑**——flutter SDK 已从机器移除（`~/ws_flutter/flutter` 不存在，.zshrc PATH 失效），恢复 SDK 后需复跑（CI frontend job 不受影响）
+- **版本引用**：main.zig 横幅/启动 JSON → v0.39.11；ci.yml ZIGMODU_VERSION=v0.39.11、ZENT_VERSION=v0.91.0（含两 job checkout ref）
+
+## Phase 82: ZigModu → zmodu 改名适配（v0.39.11 → v0.42.0）+ zent v0.91.0 → v0.97.0
+
+- **改名适配**（上游 `feat!: rename ZigModu to zmodu`，GitHub 仓库 chy3xyz/zigmodu → chy3xyz/zmodu，包名 `.zmodu`、module 名 `zmodu`、fingerprint 更新为 0xde7987a02b121580）：
+  - `build.zig.zon`：依赖键 `.zigmodu` → `.zmodu`（补 fingerprint 字段；path 仍指本地目录 `zig_ws/zigmodu`——目录未改名）
+  - `build.zig`：`b.dependency("zmodu")` + 4 处 `addImport("zmodu", zmodu_dep.module("zmodu"))`（exe/tests/bench/core）
+  - 43 个源文件 `@import("zigmodu")` → `@import("zmodu")`，本地常量名 `const zigmodu` → `const zmodu` 全量 sed（含注释/日志文案）
+- **API 破坏 1 处**：v0.40.0 删除 `http.RouteGroup` 与 `Server.group()`，运行时注册收敛到 `Router.scope()` 的 `Scoped` 面 —— websocket `startServer` 的 `server.group("").ws(...)` 迁移为 `Router(WsState).init(io, allocator, server, &state)` + `scope("").ws(...)`（ws 路由不走 catalog，无需 finish；签名与旧 group.ws 一致）
+- **API 兼容确认**：gateway 的 `router.scope("")`+`mountAll`+`finish()`（ComptimeRouter 面）不受 RouteGroup 移除影响；securityHeaders/openApiFromCatalog/PasswordEncoder 等 v0.39.11 适配保持原样
+- **zent v0.91.0 → v0.97.0**（本地 pin `snap-2026-10-20-2` snapshot tag；上游确认纯内部重构、导出路径不变）：zim 全部 zent API 面（ConnPool/PostgresDriver/sql_scan/crud_helpers/SaveOrUpdateOnWith/deinitEntity）零改动兼容，38/38 测试直接通过
+- **验证**：38/38 全过、CI 6/6 全绿、冒烟横幅 `Framework: zmodu v0.42.0`；Flutter e2e 仍因 SDK 移除未跑（Phase 81 记录）
+- **版本引用**：main.zig 横幅/启动 JSON → `zmodu v0.42.0`；ci.yml ZMODU_VERSION=v0.42.0（env 改名）、ZENT_VERSION=snap-2026-10-20-2、checkout repo → chy3xyz/zmodu（path 保持 zigmodu 目录名对齐 build.zig.zon）
+
 ## 遗留项（Phase 35 之后）
 
 - **gateway handler 已按域拆分**（Phase 49）：`gateway/handlers.zig` 4125 行拆为 298 行骨架 + `handlers/{helpers,auth,account,user,friend,group,message,conversation,encryption,office,organization,third,statistics,rtc,jssdk,health}.zig` 16 个域文件；新增 handler 遵循同结构
@@ -381,7 +460,7 @@ cd src && zig build run
 
 ## Framework
 
-[zigmodu](https://github.com/chy3xyz/zigmodu) v0.15.16 (local source `~/w4_proj/zig_ws/zigmodu`, HEAD 21522e9 = 远程同步；v0.15.13-16 含 JWT credential version、CircuitBreaker.callWithContext、HttpClient requestStream 修复、Agent streaming；Zig toolchain 0.17.0-dev.1567) provides:
+[zmodu](https://github.com/chy3xyz/zmodu) v0.42.0 (原名 ZigModu/zigmodu，v0.41.0 改名；local source `~/w4_proj/zig_ws/zigmodu`，目录名未随仓库改；v0.39.11→42.0 含 RouteGroup 移除/运行时注册收敛 Scoped、h2 fast path、AI 子系统大幅扩展；Zig toolchain 0.17.0-dev.1970) provides:
 - Module system with lifecycle (init/deinit)
 - Dependency validation at startup
 - Event bus (`TypedEventBus`, `ThreadSafeEventBus`) for decoupled communication
@@ -398,6 +477,17 @@ cd src && zig build run
 - `security.PasswordEncoder` (PBKDF2-HMAC-SHA256) / `AppSecurity` for auth
 - `Cache` (LRU) for caching
 - `IntegrationTest` / `Benchmark` / `ContractTestRunner` for testing
+
+## ORM (zent)
+
+[zent](https://github.com/chy3xyz/zent) v0.97.0 (local pin `snap-2026-10-20-2`, local source `~/w4_proj/zig_ws/zent`; v0.84+ 文本主键须调用方提供 —— conversation upsert 已适配) — Zig Entity Framework, pilot wired alongside the legacy `db_postgres` client (see `docs/zent-migration.md`):
+
+- `src/zent_schemas.zig` — Schema-as-Code mirrors of existing tables (User, Collect; SELECT is column-list based; undeclared DB columns are never touched; migrations stay the DDL source of truth)
+- `src/zent_db.zig` — `ConnPool(PostgresDriver)` + typed client holder (`getClient()`) + pooled driver view (`getDriver()`, for `sql_scan` raw-DTO queries), config strings duped for hot-reload safety
+- **Migration pattern (Phase 77)**: dual-path — migrated persistence methods prefer zent (`getClient()`/`getDriver()` non-null) and fall back to legacy db_postgres when the layer is down; `IntegrationCtx` inits zent whenever PG is reachable so integration tests always exercise the zent path
+- Concurrency rules: client must sit on the pool (never a shared single driver — wire protocol races); `health_check_on_borrow=false` (ping-under-mutex deadlock)
+- Memory contract: entity rows are owned — free via `zent_db.deinitRow(info, &row)`, row `TypeInfo` via `@TypeOf(client.user).entity_info`; `sql_scan.queryAll/queryOne` DTO results duplicate strings into the caller's allocator (request arena in prod — same contract as the legacy dupe loops they replaced)
+- Migration status: low-conflict tier complete (Phase 77-79) + conversations (Phase 80, first core-domain slice: typed `SaveOrUpdateOnWith` business-key upsert with GREATEST monotonic exprs); remaining: searchLogs, users/friends/groups/messages bulk + Tx-bound paths (TxClient + `forUpdateWith` row locks; conversation zent upsert branch activates with the TxClient migration); each step must keep 38 tests + CI gates green
 
 ## Code Generator (zmodu)
 

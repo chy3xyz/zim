@@ -1,9 +1,9 @@
 const std = @import("std");
 const core = @import("core");
-const zigmodu = @import("zigmodu");
+const zmodu = @import("zmodu");
 const service = @import("service.zig");
 
-pub const info = zigmodu.api.Module{
+pub const info = zmodu.api.Module{
     .name = "third",
     .description = "Third-party services: RustFS object storage, FCM tokens, logs",
     .dependencies = &.{ "config", "db_postgres" },

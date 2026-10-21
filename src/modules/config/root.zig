@@ -1,10 +1,10 @@
 const std = @import("std");
 const core = @import("core");
-const zigmodu = @import("zigmodu");
+const zmodu = @import("zmodu");
 const service = @import("service.zig");
 const model = @import("model.zig");
 
-pub const info = zigmodu.api.Module{
+pub const info = zmodu.api.Module{
     .name = "config",
     .description = "Configuration loading module",
     .dependencies = &.{},
@@ -20,10 +20,10 @@ fn lockConfig() void {
 
 pub fn init() !void {
     service.initConfigAllocations(core.getGlobalAllocator());
-    // zigmodu YamlParser-backed loader (fallback: defaults)
+    // zmodu YamlParser-backed loader (fallback: defaults)
     global_config = service.ConfigService.loadConfig(core.getGlobalAllocator()) catch service.ConfigService.defaultConfig();
     config_loaded = true;
-    std.log.info("ConfigModule initialized (config.yaml via zigmodu YamlParser)", .{});
+    std.log.info("ConfigModule initialized (config.yaml via zmodu YamlParser)", .{});
 }
 
 pub fn deinit() void {

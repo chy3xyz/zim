@@ -1,6 +1,6 @@
 const std = @import("std");
 const core = @import("core");
-const zigmodu = @import("zigmodu");
+const zmodu = @import("zmodu");
 const auth_mod = @import("auth.zig");
 const gw_root = @import("gateway/root.zig");
 const h = @import("gateway/handlers.zig");
@@ -9,7 +9,7 @@ const h = @import("gateway/handlers.zig");
 pub const info = gw_root.info;
 pub const GatewayRoutes = h.GatewayRoutes;
 
-const http = zigmodu.http;
+const http = zmodu.http;
 
 var g_server: ?http.Server = null;
 var g_server_thread: ?std.Thread = null;
@@ -42,7 +42,7 @@ pub fn deinit() void {
 }
 
 // ============================================================
-// HTTP transport — zigmodu http.Server + ComptimeRouter
+// HTTP transport — zmodu http.Server + ComptimeRouter
 // Handlers + route table live in gateway/handlers.zig.
 // ============================================================
 
@@ -51,9 +51,9 @@ pub fn deinit() void {
 pub fn requestArenaMiddleware(ctx: *http.Context, next: http.HandlerFn, _: ?*anyopaque) anyerror!void {
     core.setRequestAllocator(ctx.arenaAlloc());
     defer core.setRequestAllocator(null);
-    const start_ms = zigmodu.time.monotonicNowMilliseconds();
+    const start_ms = zmodu.time.monotonicNowMilliseconds();
     defer {
-        const elapsed_ms = zigmodu.time.monotonicNowMilliseconds() - start_ms;
+        const elapsed_ms = zmodu.time.monotonicNowMilliseconds() - start_ms;
         core.metricHttpDuration(@as(f64, @floatFromInt(elapsed_ms)) / 1000.0);
         // Structured access log — one readable JSON line per request.
         core.logJson(.{
@@ -126,11 +126,11 @@ pub fn initRegisteredPaths(allocator: std.mem.Allocator) !void {
 pub fn startHttpServer(io: std.Io, allocator: std.mem.Allocator, port: u16) !void {
     g_server = http.Server.init(io, allocator, port);
     var server = &g_server.?;
-    server.withGracefulDrain(zigmodu.getInFlightCounter());
+    server.withGracefulDrain(zmodu.getInFlightCounter());
     try server.addMiddleware(.{ .func = requestArenaMiddleware });
     try server.addMiddleware(.{ .func = corsMiddleware });
     // Production security headers (HSTS, frame/type protections, referrer policy)
-    try server.addMiddleware(zigmodu.http.http_middleware.securityHeaders(null));
+    try server.addMiddleware(try zmodu.http.http_middleware.securityHeaders(null));
     try server.addMiddleware(.{ .func = authMiddleware });
 
     g_app_state = AppState{ .gateway = .{} };
@@ -141,18 +141,21 @@ pub fn startHttpServer(io: std.Io, allocator: std.mem.Allocator, port: u16) !voi
     g_slot.set(g_catalog.?);
 
     // OpenAPI 3.x document generated from the route catalog
+    // openApiFromCatalog is fallible in newer zmodu (comptime slot pool);
+    // SlotPoolExhausted here would mean max_openapi_bindings needs raising.
+    const openapi_handler = http.openApiFromCatalog(&g_slot, .{
+        .title = "ZIM Server API",
+        .version = "0.4.0",
+        .description = "OpenIM-compatible IM server rewritten in Zig on zmodu",
+    }) catch return error.SlotPoolExhausted;
     try server.addRoute(.{
         .method = .GET,
         .path = "openapi.json",
-        .handler = http.openApiFromCatalog(&g_slot, .{
-            .title = "ZIM Server API",
-            .version = "0.4.0",
-            .description = "OpenIM-compatible IM server rewritten in Zig on zigmodu",
-        }),
+        .handler = openapi_handler,
     });
 
     try initRegisteredPaths(allocator);
 
     g_server_thread = try server.runInBackground();
-    std.log.info("HTTP server started on http://0.0.0.0:{d} (zigmodu http.Server + ComptimeRouter)", .{port});
+    std.log.info("HTTP server started on http://0.0.0.0:{d} (zmodu http.Server + ComptimeRouter)", .{port});
 }

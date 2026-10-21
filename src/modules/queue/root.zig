@@ -1,10 +1,10 @@
 const std = @import("std");
 const core = @import("core");
-const zigmodu = @import("zigmodu");
+const zmodu = @import("zmodu");
 const db_mod = @import("../db_postgres.zig");
 const service = @import("service.zig");
 
-pub const info = zigmodu.api.Module{
+pub const info = zmodu.api.Module{
     .name = "queue",
     .description = "PGMQ message queue wrapper",
     .dependencies = &.{"db_postgres"},

@@ -1,12 +1,12 @@
-const zigmodu = @import("zigmodu");
+const zmodu = @import("zmodu");
 const core = @import("core");
 
-// Re-export event types from core (zigmodu-native TypedEventBus integration)
+// Re-export event types from core (zmodu-native TypedEventBus integration)
 pub const EventType = core.EventType;
 pub const Event = core.Event;
 pub const EventHandler = core.EventHandler;
 
-pub const info = zigmodu.api.Module{
+pub const info = zmodu.api.Module{
     .name = "event_bus",
     .description = "Event-driven communication module (backed by core infrastructure)",
     .dependencies = &.{},

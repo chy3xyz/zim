@@ -3,8 +3,8 @@
 // File: auth.zig
 
 const core = @import("core");
-const zigmodu = @import("zigmodu");
-const http = zigmodu.http;
+const zmodu = @import("zmodu");
+const http = zmodu.http;
 const auth_mod = @import("../../auth.zig");
 const GatewayRoutes = @import("../handlers.zig").GatewayRoutes;
 const helpers = @import("helpers.zig");

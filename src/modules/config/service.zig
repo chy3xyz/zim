@@ -1,6 +1,6 @@
 const std = @import("std");
 const core = @import("core");
-const zigmodu = @import("zigmodu");
+const zmodu = @import("zmodu");
 const model = @import("model.zig");
 
 // Track heap-allocated config strings so the module can release them on
@@ -109,7 +109,7 @@ pub const ConfigService = struct {
         defer allocator.free(c);
 
         var cfg = defaultConfig();
-        // zigmodu YamlParser — INI-style `[section]` headers (canonical)
+        // zmodu YamlParser — INI-style `[section]` headers (canonical)
         if (!try applyYaml(allocator, c, &cfg)) {
             // Legacy fallback: indented YAML sections
             try applyLegacy(allocator, c, &cfg);
@@ -118,9 +118,9 @@ pub const ConfigService = struct {
     }
 };
 
-/// zigmodu YamlParser path: flat `section.key` -> config value.
+/// zmodu YamlParser path: flat `section.key` -> config value.
 fn applyYaml(allocator: std.mem.Allocator, content: []const u8, cfg: *model.Config) !bool {
-    var parser = zigmodu.YamlParser.init(allocator);
+    var parser = zmodu.YamlParser.init(allocator);
     var map = parser.parse(content) catch return false;
     defer parser.deinitMap(&map);
     if (map.count() == 0) return false;

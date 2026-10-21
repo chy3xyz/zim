@@ -1,6 +1,6 @@
 const std = @import("std");
 const core = @import("core");
-const zigmodu = @import("zigmodu");
+const zmodu = @import("zmodu");
 const db_mod = @import("db_postgres.zig");
 
 pub const model = @import("user/model.zig");
@@ -15,7 +15,7 @@ pub const OnlineStatus = model.OnlineStatus;
 pub const UserCommand = model.UserCommand;
 pub const UserStorage = persistence.UserPersistence;
 
-pub const info = zigmodu.api.Module{
+pub const info = zmodu.api.Module{
     .name = "user",
     .description = "User management - registration, profile, online status",
     .dependencies = &.{ "config", "db_postgres" },

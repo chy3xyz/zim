@@ -4,8 +4,8 @@
 
 const std = @import("std");
 const core = @import("core");
-const zigmodu = @import("zigmodu");
-const http = zigmodu.http;
+const zmodu = @import("zmodu");
+const http = zmodu.http;
 const auth_mod = @import("../../auth.zig");
 const user_mod = @import("../../user.zig");
 const dto = @import("../dto.zig");
@@ -152,11 +152,14 @@ pub fn handleVerifyCode(ctx: *http.Context, _: *GatewayRoutes.State) anyerror!vo
     const VerifyCodeReq = struct {
         phoneNumber: ?[]const u8 = null,
         email: ?[]const u8 = null,
+        areaCode: ?[]const u8 = null,
         verifyCode: []const u8,
     };
     const req = ctx.bindJson(VerifyCodeReq) catch |err| {
         return sendFail(ctx, 400, @errorName(err));
     };
-    const valid = auth_mod.verifyCode(req.phoneNumber, req.email, req.verifyCode);
+    // areaCode must match the send call: the stored target key is
+    // `"{areaCode}:{phone}"`.
+    const valid = auth_mod.verifyCode(req.phoneNumber, req.email, req.areaCode, req.verifyCode);
     return sendOk(ctx, .{ .valid = valid });
 }

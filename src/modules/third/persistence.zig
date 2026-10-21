@@ -1,5 +1,7 @@
 const std = @import("std");
 const db_mod = @import("../../modules/db_postgres.zig");
+const zent = @import("zent");
+const zent_db = @import("../../zent_db.zig");
 const model = @import("model.zig");
 
 fn freeResult(allocator: std.mem.Allocator, result: db_mod.QueryResult) void {
@@ -19,6 +21,20 @@ pub const ThirdPersistence = struct {
     }
 
     pub fn saveFCMToken(self: *ThirdPersistence, user_id: []const u8, platform_id: i32, fcm_token: []const u8) !void {
+        // zent path (preferred): same upsert through the pooled driver
+        // (docs/zent-migration.md); NOW() columns are SQL-computed.
+        if (zent_db.getDriver()) |drv| {
+            _ = drv.exec(
+                "INSERT INTO fcm_tokens (user_id, platform_id, fcm_token, updated_at) " ++
+                    "VALUES ($1, $2, $3, NOW()) " ++
+                    "ON CONFLICT (user_id, platform_id) DO UPDATE SET fcm_token = EXCLUDED.fcm_token, updated_at = NOW()",
+                &.{ .{ .string = user_id }, .{ .int = platform_id }, .{ .string = fcm_token } },
+            ) catch |err| {
+                std.log.err("Failed to save FCM token: {}", .{err});
+                return error.DatabaseError;
+            };
+            return;
+        }
         const db = self.db orelse return error.NotInitialized;
         const sql = "INSERT INTO fcm_tokens (user_id, platform_id, fcm_token, updated_at) " ++
             "VALUES ($1, $2, $3, NOW()) " ++
@@ -35,6 +51,17 @@ pub const ThirdPersistence = struct {
     }
 
     pub fn getFCMToken(self: *ThirdPersistence, user_id: []const u8, platform_id: i32) !?[]const u8 {
+        if (zent_db.getDriver()) |drv| {
+            const Row = struct { fcm_token: []const u8 };
+            const row = (zent.sql_scan.queryOne(
+                Row,
+                self.allocator,
+                drv,
+                "SELECT fcm_token FROM fcm_tokens WHERE user_id = $1 AND platform_id = $2 LIMIT 1",
+                &.{ .{ .string = user_id }, .{ .int = platform_id } },
+            ) catch return null) orelse return null;
+            return row.fcm_token;
+        }
         const db = self.db orelse return error.NotInitialized;
         const sql = "SELECT fcm_token FROM fcm_tokens WHERE user_id = $1 AND platform_id = $2 LIMIT 1";
         const params = &[_]db_mod.QueryParam{ .{ .string = user_id }, .{ .int = platform_id } };
@@ -45,6 +72,16 @@ pub const ThirdPersistence = struct {
     }
 
     pub fn saveLog(self: *ThirdPersistence, user_id: []const u8, platform: i32, file_url: []const u8) !void {
+        if (zent_db.getDriver()) |drv| {
+            _ = drv.exec(
+                "INSERT INTO app_logs (user_id, platform, file_url, created_at) VALUES ($1, $2, $3, NOW())",
+                &.{ .{ .string = user_id }, .{ .int = platform }, .{ .string = file_url } },
+            ) catch |err| {
+                std.log.err("Failed to save log: {}", .{err});
+                return error.DatabaseError;
+            };
+            return;
+        }
         const db = self.db orelse return error.NotInitialized;
         const sql = "INSERT INTO app_logs (user_id, platform, file_url, created_at) VALUES ($1, $2, $3, NOW())";
         const params = &[_]db_mod.QueryParam{
@@ -140,6 +177,16 @@ pub const ThirdPersistence = struct {
     }
 
     pub fn queueWebhookEvent(self: *ThirdPersistence, event_type: []const u8, payload: []const u8) !void {
+        if (zent_db.getDriver()) |drv| {
+            _ = drv.exec(
+                "INSERT INTO webhook_events (event_type, payload, created_at, delivered) VALUES ($1, $2, NOW(), FALSE)",
+                &.{ .{ .string = event_type }, .{ .string = payload } },
+            ) catch |err| {
+                std.log.err("Failed to queue webhook event: {}", .{err});
+                return error.DatabaseError;
+            };
+            return;
+        }
         const db = self.db orelse return error.NotInitialized;
         const sql = "INSERT INTO webhook_events (event_type, payload, created_at, delivered) VALUES ($1, $2, NOW(), FALSE)";
         const params = &[_]db_mod.QueryParam{ .{ .string = event_type }, .{ .string = payload } };
@@ -150,6 +197,17 @@ pub const ThirdPersistence = struct {
     }
 
     pub fn getPendingWebhookEvents(self: *ThirdPersistence, allocator: std.mem.Allocator, limit: i32) !model.WebhookEventsResult {
+        if (zent_db.getDriver()) |drv| {
+            var rows = try zent.sql_scan.queryAll(
+                model.WebhookEvent,
+                allocator,
+                drv,
+                "SELECT id, event_type, payload FROM webhook_events WHERE delivered = FALSE ORDER BY created_at ASC LIMIT $1",
+                &.{.{ .int = limit }},
+            );
+            const events = try rows.toOwnedSlice();
+            return model.WebhookEventsResult{ .events = events, .total = @intCast(events.len) };
+        }
         const db = self.db orelse return error.NotInitialized;
         const sql = "SELECT id, event_type, payload FROM webhook_events WHERE delivered = FALSE ORDER BY created_at ASC LIMIT $1";
         const params = &[_]db_mod.QueryParam{.{ .int = limit }};
@@ -172,6 +230,16 @@ pub const ThirdPersistence = struct {
     }
 
     pub fn markWebhookEventDelivered(self: *ThirdPersistence, event_id: i32) !void {
+        if (zent_db.getDriver()) |drv| {
+            _ = drv.exec(
+                "UPDATE webhook_events SET delivered = TRUE, delivered_at = NOW() WHERE id = $1",
+                &.{.{ .int = event_id }},
+            ) catch |err| {
+                std.log.err("Failed to mark webhook event delivered: {}", .{err});
+                return error.DatabaseError;
+            };
+            return;
+        }
         const db = self.db orelse return error.NotInitialized;
         const sql = "UPDATE webhook_events SET delivered = TRUE, delivered_at = NOW() WHERE id = $1";
         const params = &[_]db_mod.QueryParam{.{ .int = event_id }};

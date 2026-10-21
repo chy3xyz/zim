@@ -1,6 +1,6 @@
 const std = @import("std");
 const core = @import("core");
-const zigmodu = @import("zigmodu");
+const zmodu = @import("zmodu");
 const c = @import("libpq");
 const model = @import("model.zig");
 
@@ -11,7 +11,7 @@ fn dupZ(allocator: std.mem.Allocator, s: []const u8) ![:0]u8 {
     return out;
 }
 
-fn recordResult(rt: ?*zigmodu.ModuleRuntime, ok: bool) void {
+fn recordResult(rt: ?*zmodu.ModuleRuntime, ok: bool) void {
     if (rt) |r| {
         if (ok) r.recordSuccess() else r.recordFailure();
     }
@@ -123,7 +123,7 @@ fn freeParams(allocator: std.mem.Allocator, p: *const BuiltParams) void {
 fn queryParamsOn(allocator: std.mem.Allocator, conn: *c.PGconn, sql: []const u8, params: []const model.QueryParam) !model.QueryResult {
     var bp = try buildParams(allocator, sql, params);
     defer freeParams(allocator, &bp);
-    const start_ms = zigmodu.time.monotonicNowMilliseconds();
+    const start_ms = zmodu.time.monotonicNowMilliseconds();
 
     const result = c.PQexecParams(conn, bp.sql_z.ptr, @intCast(params.len), null, bp.values.ptr, bp.lengths.ptr, bp.formats.ptr, 0);
     if (result == null) return error.QueryFailed;
@@ -166,7 +166,7 @@ fn queryParamsOn(allocator: std.mem.Allocator, conn: *c.PGconn, sql: []const u8,
     }
     const owned_rows = try rows.toOwnedSlice(allocator);
     c.PQclear(result);
-    const elapsed_ms = zigmodu.time.monotonicNowMilliseconds() - start_ms;
+    const elapsed_ms = zmodu.time.monotonicNowMilliseconds() - start_ms;
     // Slow-query log (>=200ms) for perf triage.
     core.metricDbDuration(@as(f64, @floatFromInt(elapsed_ms)) / 1000.0);
     if (elapsed_ms >= 200) {
@@ -242,7 +242,7 @@ pub const PostgresClient = struct {
     pool_size: usize = 1,
     connected: bool,
     /// Per-module runtime (bulkhead + circuit breaker), set by db_postgres/root.zig.
-    runtime: ?*zigmodu.ModuleRuntime = null,
+    runtime: ?*zmodu.ModuleRuntime = null,
     /// Guards pool-wide state (connect/close/pool_size). Individual queries
     /// acquire a private connection slot and do not hold this mutex.
     mutex: std.atomic.Mutex = .unlocked,
@@ -343,7 +343,7 @@ pub const PostgresClient = struct {
         // PQexec needs a NUL-terminated C string; allocPrint'd SQL is not.
         const sql_z = try dupZ(self.allocator, sql);
         defer self.allocator.free(sql_z);
-        const start_ms = zigmodu.time.monotonicNowMilliseconds();
+        const start_ms = zmodu.time.monotonicNowMilliseconds();
         const result = c.PQexec(conn, sql_z.ptr);
         if (result == null) {
             return error.QueryFailed;
@@ -389,7 +389,7 @@ pub const PostgresClient = struct {
         const owned_rows = try rows.toOwnedSlice(self.allocator);
         c.PQclear(result);
         recordResult(self.runtime, true);
-        const elapsed_ms = zigmodu.time.monotonicNowMilliseconds() - start_ms;
+        const elapsed_ms = zmodu.time.monotonicNowMilliseconds() - start_ms;
         core.metricDbDuration(@as(f64, @floatFromInt(elapsed_ms)) / 1000.0);
         if (elapsed_ms >= 200) {
             core.logJson(.{ .event = "db_slow_query", .module = "db_postgres", .duration_ms = elapsed_ms });
@@ -418,7 +418,7 @@ pub const PostgresClient = struct {
         const conn = try self.ensureHealthy(pool_idx);
         const sql_z = try dupZ(self.allocator, sql);
         defer self.allocator.free(sql_z);
-        const start_ms = zigmodu.time.monotonicNowMilliseconds();
+        const start_ms = zmodu.time.monotonicNowMilliseconds();
         const result = c.PQexec(conn, sql_z.ptr);
         if (result == null) {
             return error.ExecFailed;
@@ -439,7 +439,7 @@ pub const PostgresClient = struct {
         }
         c.PQclear(result);
         recordResult(self.runtime, true);
-        const elapsed_ms = zigmodu.time.monotonicNowMilliseconds() - start_ms;
+        const elapsed_ms = zmodu.time.monotonicNowMilliseconds() - start_ms;
         core.metricDbDuration(@as(f64, @floatFromInt(elapsed_ms)) / 1000.0);
         if (elapsed_ms >= 200) {
             core.logJson(.{ .event = "db_slow_exec", .module = "db_postgres", .duration_ms = elapsed_ms });

@@ -4,8 +4,8 @@
 
 const std = @import("std");
 const core = @import("core");
-const zigmodu = @import("zigmodu");
-const http = zigmodu.http;
+const zmodu = @import("zmodu");
+const http = zmodu.http;
 const user_mod = @import("../../user.zig");
 const message_mod = @import("../../message.zig");
 const group_mod = @import("../../group.zig");
