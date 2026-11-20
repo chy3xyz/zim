@@ -4,7 +4,9 @@
 > + 迁移切片 2（Phase 78：auth_tokens / auth_verification_codes / fcm_tokens / webhook_events / app_logs）
 > + 迁移切片 3（Phase 79：office 工作圈全量 + tags + clientConfig，低冲突层收尾）
 > + 迁移切片 4（Phase 80：conversation 全量 —— 核心域第一片， BEST_PRACTICES
-> 对齐的类型化升级：SaveOrUpdateOnWith 业务键 upsert + GREATEST 单调表达式）；
+> 对齐的类型化升级：SaveOrUpdateOnWith 业务键 upsert + GREATEST 单调表达式）
+> + 切片 A/B（Phase 86-87：全部 8 处多语句原子事务迁 TxClient —— LegacyExecAdapter
+> 把 legacy SQL 桥到事务连接，conversation upsert 事务内 typed；核心域数据栈迁移完成）；
 > 本文档记录可行性结论与逐表迁移路线。
 
 ## 背景
@@ -72,12 +74,14 @@ zim 现状：全部持久化走自研 `db_postgres.zig`（libpq + 参数化 SQL 
      unread/count → `queryOne({count:i64} DTO)`；tags CRUD（TagRow DTO 中转 + tag_members
      子查询填充 user_id_list，字符串所有权转移给返回值）；clientConfig → `queryOne`。
    - 剩余候选：`searchLogs` 动态 WHERE 查询（third 模块唯一 legacy 读写路径）。
-3. **核心域**（`users`/`friends`/`groups`/`messages`；`conversations` ✅ Phase 80）：
-   - schema 全量映射（含 TIMESTAMPTZ 用 `field.Time`）；
-   - 写路径事务用 `zent_db.beginTx()`（TxClient，嵌套降级 savepoint）对齐现有 `Tx` 语义；
-   - 会话同步批量 upsert（`upsertWithLatestBatch` 500 行分块）对位 zent
-     `BulkInsert` + `SaveOrUpdateOnWith` 自定义更新表达式（v0.34.0，`GREATEST` 单调可用
-     `{t:col}`/`{x:col}` 模板表达）。
+3. **核心域**（✅ Phase 86-87 完成：全部多语句事务跑 TxClient）：
+   - 事务通道：服务/持久化入口双轨——`beginTxFromDriver` 开事务，legacy SQL 经
+     `zent_db.LegacyExecAdapter`（queryParams/execParams → zent Tx）跑事务连接，
+     conversation upsert 走 typed builder（事务内）；legacy db_postgres Tx 回退保留；
+   - **TxClient allocator 规则**：`beginTxFromDriver` 的 allocator 决定 tx.client 的
+     allocator，必须与实体 deinit 的 `zent_db.getAllocator()` 同源（请求 arena 会导致
+     跨分配器 free panic）；
+   - 遗留 legacy SQL（只读/低频路径）惰性迁移，不设期限。
 4. **每迁移一域**：旧 SQL 删除 + deadcode 门禁确认为 0 + 契约测试保持绿。
 
 ### 迁移模式（Phase 77 确立）

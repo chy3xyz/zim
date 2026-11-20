@@ -1713,7 +1713,7 @@ test "handler contract: statistics/office/rtc/organization/third" {
     defer wm.deinit(kit_arena.allocator());
     try std.testing.expect(std.mem.indexOf(u8, wm.body, "\"errCode\":0") != null);
 
-    // /rtc-meeting/create — in-memory meeting room
+    // /rtc-meeting/create — persisted meeting room (Phase 84)
     const rtc_body = try std.fmt.allocPrint(ctx.arena_ptr.allocator(), "{{\"hostUserID\":\"{s}\",\"meetingName\":\"x chat\"}}", .{a});
     var rtc = try zmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/rtc-meeting/create", .{
         .body = rtc_body,
@@ -1722,6 +1722,42 @@ test "handler contract: statistics/office/rtc/organization/third" {
     defer rtc.deinit(kit_arena.allocator());
     try std.testing.expect(std.mem.indexOf(u8, rtc.body, "\"errCode\":0") != null);
     try std.testing.expect(std.mem.indexOf(u8, rtc.body, "\"roomID\"") != null);
+    // extract roomID for the info/list contract checks (Phase 85 camelCase)
+    {
+        const parsed = std.json.parseFromSlice(std.json.Value, kit_arena.allocator(), rtc.body, .{}) catch unreachable;
+        const room = parsed.value.object.get("data").?.object.get("roomID").?.string;
+        var info = try zmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/rtc-meeting/info", .{
+            .body = try std.fmt.allocPrint(ctx.arena_ptr.allocator(), "{{\"roomID\":\"{s}\"}}", .{room}),
+            .headers = &.{mk(tok.token)},
+        });
+        defer info.deinit(kit_arena.allocator());
+        // Go rtc.proto MeetingInfo camelCase contract: roomID/meetingName/
+        // hostUserID/createTime (+ recordID for the zim recording extension)
+        try std.testing.expect(std.mem.indexOf(u8, info.body, "\"roomID\"") != null);
+        try std.testing.expect(std.mem.indexOf(u8, info.body, "\"meetingName\":\"x chat\"") != null);
+        try std.testing.expect(std.mem.indexOf(u8, info.body, "\"hostUserID\"") != null);
+        try std.testing.expect(std.mem.indexOf(u8, info.body, "\"createTime\"") != null);
+        try std.testing.expect(std.mem.indexOf(u8, info.body, "\"recordID\"") != null);
+        // snake_case leakage must be gone
+        try std.testing.expect(std.mem.indexOf(u8, info.body, "host_user_id") == null);
+        try std.testing.expect(std.mem.indexOf(u8, info.body, "meeting_name") == null);
+
+        var list = try zmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/rtc-meeting/list", .{
+            .body = "{}",
+            .headers = &.{mk(tok.token)},
+        });
+        defer list.deinit(kit_arena.allocator());
+        try std.testing.expect(std.mem.indexOf(u8, list.body, "\"meetings\"") != null);
+        try std.testing.expect(std.mem.indexOf(u8, list.body, "\"roomID\":\"") != null);
+        try std.testing.expect(std.mem.indexOf(u8, list.body, "room_id") == null);
+
+        var close_resp = try zmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/rtc-meeting/close", .{
+            .body = try std.fmt.allocPrint(ctx.arena_ptr.allocator(), "{{\"roomID\":\"{s}\",\"userID\":\"{s}\"}}", .{ room, a }),
+            .headers = &.{mk(tok.token)},
+        });
+        defer close_resp.deinit(kit_arena.allocator());
+        try std.testing.expect(std.mem.indexOf(u8, close_resp.body, "\"errCode\":0") != null);
+    }
 
     // /organization/info — org tree
     var org = try zmodu.http.Testkit.dispatchOpts(&holder.server, .POST, "/organization/info", .{
@@ -1924,4 +1960,125 @@ test "zent: conversation upsert monotonic + read/update/delete" {
     try std.testing.expect(conversation_mod.conversationCount() >= 1);
     try std.testing.expect(try conversation_mod.deleteConversation(owner, conv_id));
     try std.testing.expect((try conversation_mod.getConversation(owner, conv_id)) == null);
+}
+
+// ============================================================
+// Phase 84: RTC meeting persistence — rooms/participants live in
+// PostgreSQL (survive restarts), create/close are TxClient
+// transactions, stale rooms are archived at gateway start
+// ============================================================
+test "rtc: meeting lifecycle persists and restores" {
+    const allocator = std.testing.allocator;
+    var ctx = IntegrationCtx.init(allocator) orelse return;
+    defer ctx.deinit();
+
+    const zent_db = @import("zent_db.zig");
+    const zent = @import("zent");
+    if (zent_db.getDriver() == null) {
+        std.log.warn("[rtc] layer not initialized — skipping", .{});
+        return;
+    }
+
+    const rtc_pers = @import("modules/gateway/rtc_persistence.zig");
+    const gw_root = @import("modules/gateway/root.zig");
+    const arena = ctx.arena_ptr.allocator();
+    const host = try ctx.register("rtc_host");
+    const guest = try ctx.register("rtc_guest");
+    const room_id = try gw_root.generateRoomID(arena);
+
+    // create → get round-trips every field through PostgreSQL
+    try rtc_pers.createMeeting(room_id, host, "prod meeting");
+    var m = (try rtc_pers.getMeeting(room_id)).?;
+    try std.testing.expectEqualStrings("prod meeting", m.meeting_name);
+    try std.testing.expectEqualStrings(host, m.host_user_id);
+    try std.testing.expectEqual(@as(i32, 1), m.status);
+    try std.testing.expect(m.create_time > 0);
+
+    // duplicate room id is rejected (pk)
+    try std.testing.expectError(error.RoomExists, rtc_pers.createMeeting(room_id, host, "dup"));
+
+    // join (idempotent) + participant listing for signal fan-out
+    try std.testing.expect(try rtc_pers.addParticipant(room_id, guest));
+    try std.testing.expect(try rtc_pers.addParticipant(room_id, guest));
+    const ids = try rtc_pers.getParticipantIds(room_id);
+    try std.testing.expectEqual(@as(usize, 2), ids.len);
+
+    // participant flags persist (mute / video off)
+    try rtc_pers.setParticipantFlag(room_id, guest, "is_muted", true);
+    try rtc_pers.setParticipantFlag(room_id, guest, "is_video_on", false);
+    const MutedRow = struct { is_muted: bool, is_video_on: bool };
+    const flag_row = (try zent.sql_scan.queryOne(
+        MutedRow,
+        allocator,
+        zent_db.getDriver().?,
+        "SELECT is_muted, is_video_on FROM rtc_participants WHERE room_id = $1 AND user_id = $2",
+        &.{ .{ .string = room_id }, .{ .string = guest } },
+    )).?;
+    try std.testing.expect(flag_row.is_muted);
+    try std.testing.expect(!flag_row.is_video_on);
+
+    // layout + record state persist on the meeting row
+    try rtc_pers.setLayout(room_id, 2);
+    try rtc_pers.setRecordId(room_id, "rec_x1");
+    m = (try rtc_pers.getMeeting(room_id)).?;
+    try std.testing.expectEqual(@as(i32, 2), m.layout);
+    try std.testing.expectEqualStrings("rec_x1", m.record_id.?);
+
+    // transfer host: ownership checked in SQL
+    try std.testing.expect(try rtc_pers.transferHost(room_id, host, guest));
+    try std.testing.expect(!try rtc_pers.transferHost(room_id, host, guest)); // no longer host
+    m = (try rtc_pers.getMeeting(room_id)).?;
+    try std.testing.expectEqualStrings(guest, m.host_user_id);
+
+    // list only returns active rooms
+    const list = try rtc_pers.listActiveMeetings();
+    var found = false;
+    for (list) |it| {
+        if (std.mem.eql(u8, it.room_id, room_id)) found = true;
+    }
+    try std.testing.expect(found);
+
+    // close by non-host is a no-op; by host removes meeting + participants
+    try std.testing.expect(!try rtc_pers.closeMeeting(room_id, host)); // guest owns it now
+    try std.testing.expect(try rtc_pers.closeMeeting(room_id, guest));
+    try std.testing.expect((try rtc_pers.getMeeting(room_id)) == null);
+    const ids_after = try rtc_pers.getParticipantIds(room_id);
+    try std.testing.expectEqual(@as(usize, 0), ids_after.len);
+}
+
+test "rtc: restart archives stale active rooms" {
+    const allocator = std.testing.allocator;
+    var ctx = IntegrationCtx.init(allocator) orelse return;
+    defer ctx.deinit();
+
+    const zent_db = @import("zent_db.zig");
+    const zent = @import("zent");
+    if (zent_db.getDriver() == null) {
+        std.log.warn("[rtc] layer not initialized — skipping", .{});
+        return;
+    }
+
+    const rtc_pers = @import("modules/gateway/rtc_persistence.zig");
+    const gw_root = @import("modules/gateway/root.zig");
+    const arena = ctx.arena_ptr.allocator();
+    const host = try ctx.register("rtc_stale");
+    const room_id = try gw_root.generateRoomID(arena);
+
+    try rtc_pers.createMeeting(room_id, host, "will be archived");
+    try std.testing.expect((try rtc_pers.getMeeting(room_id)) != null);
+
+    // Simulates the next process start: every still-active room is ended
+    // (status=2, ended_at set) and no longer answers queries.
+    rtc_pers.archiveStaleMeetings();
+    try std.testing.expect((try rtc_pers.getMeeting(room_id)) == null);
+    const ActiveRow = struct { status: i64, ended_at: ?i64 };
+    const row = (try zent.sql_scan.queryOne(
+        ActiveRow,
+        allocator,
+        zent_db.getDriver().?,
+        "SELECT status, ended_at FROM rtc_meetings WHERE room_id = $1",
+        &.{.{ .string = room_id }},
+    )).?;
+    try std.testing.expectEqual(@as(i64, 2), row.status);
+    try std.testing.expect(row.ended_at != null);
 }

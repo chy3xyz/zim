@@ -80,4 +80,21 @@ pub const Conversation = Schema("Conversation", .{
     },
 });
 
-pub const all = &.{ User, Collect, Conversation };
+/// `rtc_meetings` (Phase 84 persistence) — room_id is the caller-generated
+/// business pk; `ended_at` (NULL until closed) stays undeclared, touched only
+/// via raw exec on the archive path.
+pub const RtcMeeting = Schema("RtcMeeting", .{
+    .table_name = "rtc_meetings",
+    .pk = "room_id",
+    .fields = &.{
+        field.String("room_id"),
+        field.String("host_user_id"),
+        field.String("meeting_name").Default(""),
+        field.Int("status").Default(1),
+        field.Int("layout").Default(0),
+        field.String("record_id"),
+        field.Int("create_time").Default(0),
+    },
+});
+
+pub const all = &.{ User, Collect, Conversation, RtcMeeting };

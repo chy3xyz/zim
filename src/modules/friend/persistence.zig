@@ -1,5 +1,7 @@
 const std = @import("std");
 const db_mod = @import("../db_postgres.zig");
+const zent = @import("zent");
+const zent_db = @import("../../zent_db.zig");
 const model = @import("model.zig");
 
 pub const FriendPersistence = struct {
@@ -73,9 +75,6 @@ pub const FriendPersistence = struct {
 
     pub fn respondFriendRequest(self: *FriendPersistence, from_user_id: []const u8, to_user_id: []const u8, accept: bool, handle_msg: []const u8) !void {
         // Atomic: mark request handled + bidirectional friend rows in one tx.
-        var tx = try self.db.begin();
-        errdefer tx.rollback();
-
         const result_val: i16 = if (accept) 1 else -1;
         const sql = "UPDATE friend_requests SET handle_result = $1, handle_msg = $2, handle_time = NOW(), handler_user_id = $3 WHERE from_user_id = $4 AND to_user_id = $5 AND handle_result = 0";
         const params = &[_]db_mod.QueryParam{
@@ -85,17 +84,32 @@ pub const FriendPersistence = struct {
             .{ .string = from_user_id },
             .{ .string = to_user_id },
         };
+        const friend_sql = "INSERT INTO friends (owner_user_id, friend_user_id, remark, add_source, operator_user_id, ex, is_pinned) VALUES ($1, $2, '', 0, '', '', FALSE) ON CONFLICT DO NOTHING";
+        const p1 = &[_]db_mod.QueryParam{ .{ .string = from_user_id }, .{ .string = to_user_id } };
+        const p2 = &[_]db_mod.QueryParam{ .{ .string = to_user_id }, .{ .string = from_user_id } };
+
+        // zent path (Phase 87): TxClient + legacy-SQL adapter on the tx
+        // connection (docs/zent-migration.md dual-path pattern).
+        if (zent_db.getDriver()) |drv| {
+            var ztx = try zent.codegen.beginTxFromDriver(zent_db.schema_infos, drv, zent_db.getAllocator());
+            defer ztx.deinit();
+            errdefer ztx.rollback() catch {};
+            const adapter = zent_db.LegacyExecAdapter{ .drv = ztx.tx, .alloc = self.allocator };
+            _ = try adapter.execParams(sql, params);
+            if (accept) {
+                _ = try adapter.execParams(friend_sql, p1);
+                _ = try adapter.execParams(friend_sql, p2);
+            }
+            try ztx.commit();
+            return;
+        }
+
+        var tx = try self.db.begin();
+        errdefer tx.rollback();
         _ = try tx.execParams(sql, params);
-
         if (accept) {
-            // Create bidirectional friend entries
-            const sql1 = "INSERT INTO friends (owner_user_id, friend_user_id, remark, add_source, operator_user_id, ex, is_pinned) VALUES ($1, $2, '', 0, '', '', FALSE) ON CONFLICT DO NOTHING";
-            const p1 = &[_]db_mod.QueryParam{ .{ .string = from_user_id }, .{ .string = to_user_id } };
-            _ = try tx.execParams(sql1, p1);
-
-            const sql2 = "INSERT INTO friends (owner_user_id, friend_user_id, remark, add_source, operator_user_id, ex, is_pinned) VALUES ($1, $2, '', 0, '', '', FALSE) ON CONFLICT DO NOTHING";
-            const p2 = &[_]db_mod.QueryParam{ .{ .string = to_user_id }, .{ .string = from_user_id } };
-            _ = try tx.execParams(sql2, p2);
+            _ = try tx.execParams(friend_sql, p1);
+            _ = try tx.execParams(friend_sql, p2);
         }
         try tx.commit();
     }
@@ -211,17 +225,25 @@ pub const FriendPersistence = struct {
 
     pub fn deleteFriend(self: *FriendPersistence, owner_user_id: []const u8, friend_user_id: []const u8) !bool {
         // Atomic: remove both directions of the friendship in one transaction.
-        var tx = try self.db.begin();
-        errdefer tx.rollback();
-
         const sql1 = "DELETE FROM friends WHERE owner_user_id = $1 AND friend_user_id = $2";
         const params1 = &[_]db_mod.QueryParam{ .{ .string = owner_user_id }, .{ .string = friend_user_id } };
-        const r1 = try tx.execParams(sql1, params1);
-
-        const sql2 = "DELETE FROM friends WHERE owner_user_id = $1 AND friend_user_id = $2";
         const params2 = &[_]db_mod.QueryParam{ .{ .string = friend_user_id }, .{ .string = owner_user_id } };
-        const r2 = try tx.execParams(sql2, params2);
 
+        if (zent_db.getDriver()) |drv| {
+            var ztx = try zent.codegen.beginTxFromDriver(zent_db.schema_infos, drv, zent_db.getAllocator());
+            defer ztx.deinit();
+            errdefer ztx.rollback() catch {};
+            const adapter = zent_db.LegacyExecAdapter{ .drv = ztx.tx, .alloc = self.allocator };
+            const r1 = try adapter.execParams(sql1, params1);
+            const r2 = try adapter.execParams(sql1, params2);
+            try ztx.commit();
+            return r1 > 0 or r2 > 0;
+        }
+
+        var tx = try self.db.begin();
+        errdefer tx.rollback();
+        const r1 = try tx.execParams(sql1, params1);
+        const r2 = try tx.execParams(sql1, params2);
         try tx.commit();
         return r1 > 0 or r2 > 0;
     }

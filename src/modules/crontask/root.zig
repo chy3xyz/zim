@@ -12,7 +12,12 @@ pub const info = zmodu.api.Module{
     .runtime = .{ .max_concurrent = 10 },
 };
 
-var g_running: bool = false;
+// g_running is atomic: the loop reads it every slice and deinit writes it
+// from another thread — a plain bool races (the optimizer may hoist the
+// load out of the loop, hanging shutdown). g_io is written before the
+// worker thread spawns (main.zig calls setIo ahead of app.start), so a
+// plain optional stays correct.
+var g_running = std.atomic.Value(bool).init(false);
 var g_thread: ?std.Thread = null;
 var g_io: ?std.Io = null;
 
@@ -23,7 +28,7 @@ pub fn setIo(io: std.Io) void {
 var g_service: ?service.CrontaskService = null;
 
 pub fn init() !void {
-    g_running = true;
+    g_running.store(true, .release);
     const db = db_mod.getClient();
     g_service = service.CrontaskService.init(db);
     g_thread = try std.Thread.spawn(.{}, crontaskLoop, .{});
@@ -31,7 +36,7 @@ pub fn init() !void {
 }
 
 pub fn deinit() void {
-    g_running = false;
+    g_running.store(false, .release);
     if (g_thread) |t| {
         t.join();
         g_thread = null;
@@ -52,7 +57,7 @@ fn crontaskLoop() void {
     var last_cfg_mtime: ?i128 = null;
     // Baseline at startup so any later change is detected on the first pass.
     if (g_io) |io| last_cfg_mtime = config_mod.configFileMtime(io);
-    while (g_running) {
+    while (g_running.load(.acquire)) {
         iteration += 1;
         std.log.info("[Crontask] Running scheduled tasks (iteration {d})", .{iteration});
 
@@ -84,7 +89,7 @@ fn crontaskLoop() void {
         // removed in Zig 0.17; std.c.nanosleep did not actually sleep here).
         var remaining: u32 = 300;
         var slice: u32 = 0;
-        while (remaining > 0 and g_running) : (remaining -= 1) {
+        while (remaining > 0 and g_running.load(.acquire)) : (remaining -= 1) {
             if (g_io) |io| std.Io.sleep(io, .{ .nanoseconds = 1_000_000_000 }, .real) catch {};
             // Config hot-reload: detect config.yaml changes every ~30s and
             // reload values read dynamically (webhook filters, log path).

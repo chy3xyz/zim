@@ -284,7 +284,7 @@ pub const GroupPersistence = struct {
 
     /// Batch-invite members atomically: all member rows + the group updated_at
     /// touch commit together, so a mid-loop failure leaves no partial invite.
-    pub fn addMembersTx(self: *GroupPersistence, tx: *db_mod.Tx, group_id: []const u8, user_ids: []const []const u8, inviter: []const u8) !void {
+    pub fn addMembersTx(self: *GroupPersistence, tx: anytype, group_id: []const u8, user_ids: []const []const u8, inviter: []const u8) !void {
         _ = self;
         if (user_ids.len == 0) return;
         const now = core.unixNowSeconds();
@@ -326,7 +326,7 @@ pub const GroupPersistence = struct {
     /// Transfer group ownership atomically: old owner → member, new owner →
     /// owner, creator_user_id updated — all in one transaction so a failure
     /// never leaves a group without an owner.
-    pub fn transferOwnerTx(self: *GroupPersistence, tx: *db_mod.Tx, group_id: []const u8, old_owner: []const u8, new_owner: []const u8) !void {
+    pub fn transferOwnerTx(self: *GroupPersistence, tx: anytype, group_id: []const u8, old_owner: []const u8, new_owner: []const u8) !void {
         _ = self;
         _ = try tx.execParams("UPDATE group_members SET role_level = $1 WHERE group_id = $2 AND user_id = $3", &.{
             .{ .smallint = @backingInt(model.MemberRole.member) },
@@ -346,6 +346,17 @@ pub const GroupPersistence = struct {
 
     pub fn dismiss(self: *GroupPersistence, group_id: []const u8) bool {
         // Atomic: remove group + members + pending requests together.
+        if (zent_db.getDriver()) |drv| {
+            var ztx = zent.codegen.beginTxFromDriver(zent_db.schema_infos, drv, zent_db.getAllocator()) catch return false;
+            defer ztx.deinit();
+            errdefer ztx.rollback() catch {};
+            const adapter = zent_db.LegacyExecAdapter{ .drv = ztx.tx, .alloc = self.allocator };
+            _ = adapter.execParams("DELETE FROM group_members WHERE group_id = $1", &.{.{ .string = group_id }}) catch return false;
+            _ = adapter.execParams("DELETE FROM group_requests WHERE group_id = $1", &.{.{ .string = group_id }}) catch return false;
+            _ = adapter.execParams("DELETE FROM groups WHERE group_id = $1", &.{.{ .string = group_id }}) catch return false;
+            ztx.commit() catch return false;
+            return true;
+        }
         var tx = self.db.begin() catch return false;
         errdefer tx.rollback();
         _ = tx.execParams("DELETE FROM group_members WHERE group_id = $1", &.{.{ .string = group_id }}) catch return false;

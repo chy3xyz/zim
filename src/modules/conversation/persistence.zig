@@ -146,6 +146,40 @@ pub const ConversationPersistence = struct {
         _ = self;
     }
 
+    /// Typed upsert shared by the direct (pooled client) and transactional
+    /// (TxClient client view) zent paths. GREATEST keeps max_seq/group_at_type
+    /// monotonic; the caller-provided UUID pk is preserved on conflict.
+    fn upsertWithLatestOnClient(client: zent_db.ClientType, owner_user_id: []const u8, conversation_id: []const u8, conversation_type: i16, user_id: []const u8, group_id: []const u8, latest_msg: []const u8, latest_send_time: i64, latest_send_id: []const u8, latest_content_type: i16, max_seq: i64, group_at_type: i16) !void {
+        var b = try client.conversation.Create();
+        defer b.deinit();
+        // zent v0.84+ requires a caller-provided text pk; generate a v4
+        // UUID and keep the existing id on the conflict path.
+        const new_id = try generateUuidV4(core.getAllocator());
+        _ = try b.setFieldValue("id", new_id);
+        _ = try b.setFieldValue("owner_user_id", owner_user_id);
+        _ = try b.setFieldValue("conversation_id", conversation_id);
+        // zent schema fields are i64 — smallint inputs cast at the boundary
+        _ = try b.setFieldValue("conversation_type", @as(i64, conversation_type));
+        _ = try b.setFieldValue("user_id", user_id);
+        _ = try b.setFieldValue("group_id", group_id);
+        _ = try b.setFieldValue("latest_msg", latest_msg);
+        _ = try b.setFieldValue("latest_msg_send_time", latest_send_time);
+        _ = try b.setFieldValue("latest_msg_send_id", latest_send_id);
+        _ = try b.setFieldValue("latest_msg_content_type", @as(i64, latest_content_type));
+        _ = try b.setFieldValue("max_seq", max_seq);
+        _ = try b.setFieldValue("group_at_type", @as(i64, group_at_type));
+        var created = try b.SaveOrUpdateOnWith(
+            &.{ "owner_user_id", "conversation_id" },
+            &.{
+                .{ .column = "id", .expr = "{t:id}" },
+                .{ .column = "max_seq", .expr = "GREATEST({t:max_seq}, {x:max_seq})" },
+                .{ .column = "group_at_type", .expr = "GREATEST({t:group_at_type}, {x:group_at_type})" },
+                .{ .column = "update_time", .expr = "NOW()" },
+            },
+        );
+        zent_db.deinitRow(@TypeOf(client.conversation).entity_info, &created);
+    }
+
     /// Upsert a conversation with the latest message info in one statement.
     /// `exec` may be a `*PostgresClient` or a `*Tx` (transactional message send).
     /// max_seq is monotonic (GREATEST) so out-of-order sends never regress it.
@@ -158,36 +192,16 @@ pub const ConversationPersistence = struct {
     /// different connection, and mixing them would break the send
     /// transaction's atomicity.
     pub fn upsertWithLatest(self: *ConversationPersistence, exec: anytype, owner_user_id: []const u8, conversation_id: []const u8, conversation_type: i16, user_id: []const u8, group_id: []const u8, latest_msg: []const u8, latest_send_time: i64, latest_send_id: []const u8, latest_content_type: i16, max_seq: i64, group_at_type: i16) !void {
+        _ = self;
+        // Inside a zent transaction the caller passes the TxClient's typed
+        // client view — the upsert rides the transaction connection via the
+        // typed builder (Phase 86 activates this branch from sendInTx).
+        if (@TypeOf(exec) == zent_db.ClientType) {
+            try upsertWithLatestOnClient(exec, owner_user_id, conversation_id, conversation_type, user_id, group_id, latest_msg, latest_send_time, latest_send_id, latest_content_type, max_seq, group_at_type);
+            return;
+        }
         if (zent_db.getClient() != null and @TypeOf(exec) == *db_mod.PostgresClient) {
-            const client = zent_db.getClient().?;
-            var b = try client.conversation.Create();
-            defer b.deinit();
-            // zent v0.84+ requires a caller-provided text pk; generate a v4
-            // UUID and keep the existing id on the conflict path.
-            const new_id = try generateUuidV4(self.allocator);
-            _ = try b.setFieldValue("id", new_id);
-            _ = try b.setFieldValue("owner_user_id", owner_user_id);
-            _ = try b.setFieldValue("conversation_id", conversation_id);
-            // zent schema fields are i64 — smallint inputs cast at the boundary
-            _ = try b.setFieldValue("conversation_type", @as(i64, conversation_type));
-            _ = try b.setFieldValue("user_id", user_id);
-            _ = try b.setFieldValue("group_id", group_id);
-            _ = try b.setFieldValue("latest_msg", latest_msg);
-            _ = try b.setFieldValue("latest_msg_send_time", latest_send_time);
-            _ = try b.setFieldValue("latest_msg_send_id", latest_send_id);
-            _ = try b.setFieldValue("latest_msg_content_type", @as(i64, latest_content_type));
-            _ = try b.setFieldValue("max_seq", max_seq);
-            _ = try b.setFieldValue("group_at_type", @as(i64, group_at_type));
-            var created = try b.SaveOrUpdateOnWith(
-                &.{ "owner_user_id", "conversation_id" },
-                &.{
-                    .{ .column = "id", .expr = "{t:id}" },
-                    .{ .column = "max_seq", .expr = "GREATEST({t:max_seq}, {x:max_seq})" },
-                    .{ .column = "group_at_type", .expr = "GREATEST({t:group_at_type}, {x:group_at_type})" },
-                    .{ .column = "update_time", .expr = "NOW()" },
-                },
-            );
-            zent_db.deinitRow(@TypeOf(client.conversation).entity_info, &created);
+            try upsertWithLatestOnClient(zent_db.getClient().?.*, owner_user_id, conversation_id, conversation_type, user_id, group_id, latest_msg, latest_send_time, latest_send_id, latest_content_type, max_seq, group_at_type);
             return;
         }
         const sql = "INSERT INTO conversations (owner_user_id, conversation_id, conversation_type, user_id, group_id, recv_msg_opt, is_pinned, is_private_chat, burn_duration, attached_info, ex, max_seq, min_seq, has_read_seq, latest_msg, latest_msg_send_time, latest_msg_send_id, latest_msg_content_type, group_at_type, create_time, update_time) " ++
@@ -276,6 +290,55 @@ pub const ConversationPersistence = struct {
         const sql = try sql_builder.toOwnedSlice(self.allocator);
         defer self.allocator.free(sql);
         _ = try exec.execParams(sql, params.items);
+    }
+
+    /// zent-tx batch variant: identical multi-row SQL, executed through the
+    /// transaction's own driver so the fan-out stays atomic with the message
+    /// insert (Phase 86). Parameter construction switches QueryParam → Value.
+    pub fn upsertWithLatestBatchZent(self: *ConversationPersistence, tx: zent.sql_driver.Tx, items: []const UpsertItem) !void {
+        if (items.len == 0) return;
+        var idx: usize = 0;
+        while (idx < items.len) : (idx += MAX_BATCH_ROWS) {
+            const chunk = items[idx..@min(idx + MAX_BATCH_ROWS, items.len)];
+            try self.upsertChunkZent(tx, chunk);
+        }
+    }
+
+    fn upsertChunkZent(self: *ConversationPersistence, tx: zent.sql_driver.Tx, items: []const UpsertItem) !void {
+        const per = 11;
+        var sql_builder = std.ArrayList(u8).empty;
+        defer sql_builder.deinit(self.allocator);
+        try sql_builder.appendSlice(self.allocator, "INSERT INTO conversations (owner_user_id, conversation_id, conversation_type, user_id, group_id, recv_msg_opt, is_pinned, is_private_chat, burn_duration, attached_info, ex, max_seq, min_seq, has_read_seq, latest_msg, latest_msg_send_time, latest_msg_send_id, latest_msg_content_type, group_at_type, create_time, update_time) VALUES ");
+        var args = std.ArrayList(zent.sql.Value).empty;
+        defer args.deinit(self.allocator);
+        for (items, 0..) |it, i| {
+            if (i > 0) try sql_builder.appendSlice(self.allocator, ", ");
+            const base: usize = i * per;
+            var buf: [256]u8 = undefined;
+            const row = try std.fmt.bufPrint(
+                &buf,
+                "(${d}, ${d}, ${d}, ${d}, ${d}, 0, FALSE, FALSE, 0, '', '', ${d}, 0, 0, ${d}, ${d}, ${d}, ${d}, ${d}, NOW(), NOW())",
+                .{ base + 1, base + 2, base + 3, base + 4, base + 5, base + 6, base + 7, base + 8, base + 9, base + 10, base + 11 },
+            );
+            try sql_builder.appendSlice(self.allocator, row);
+            try args.appendSlice(self.allocator, &.{
+                .{ .string = it.owner_user_id },
+                .{ .string = it.conversation_id },
+                .{ .int = it.conversation_type },
+                .{ .string = it.user_id },
+                .{ .string = it.group_id },
+                .{ .int = it.max_seq },
+                .{ .string = it.latest_msg },
+                .{ .int = it.latest_send_time },
+                .{ .string = it.latest_send_id },
+                .{ .int = it.latest_content_type },
+                .{ .int = it.group_at_type },
+            });
+        }
+        try sql_builder.appendSlice(self.allocator, " ON CONFLICT (owner_user_id, conversation_id) DO UPDATE SET latest_msg = EXCLUDED.latest_msg, latest_msg_send_time = EXCLUDED.latest_msg_send_time, latest_msg_send_id = EXCLUDED.latest_msg_send_id, latest_msg_content_type = EXCLUDED.latest_msg_content_type, max_seq = GREATEST(conversations.max_seq, EXCLUDED.max_seq), group_at_type = GREATEST(conversations.group_at_type, EXCLUDED.group_at_type), update_time = NOW()");
+        const sql = try sql_builder.toOwnedSlice(self.allocator);
+        defer self.allocator.free(sql);
+        _ = try tx.exec(sql, args.items);
     }
 
     // ── Conversations ─────────────────────────────────────────────

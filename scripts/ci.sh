@@ -36,7 +36,9 @@ echo "== [5/6] zmodu deadcode"
 
 echo "== [6/6] smoke: boot + /health"
 # Catches startup-only crashes (e.g. libpq result UAF surfaced at boot) that
-# unit tests never reach.
+# unit tests never reach. A stale instance keeps the ports SO_REUSEPORT-bound
+# and silently steals smoke connections (handshake resets) — clear first.
+pkill -f zig-out/bin/zim 2>/dev/null && sleep 1 || true
 ./zig-out/bin/zim > /tmp/zim-ci-smoke.log 2>&1 &
 ZIM_PID=$!
 for _ in $(seq 1 20); do

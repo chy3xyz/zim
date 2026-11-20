@@ -10,8 +10,8 @@ env:
   # Match the local toolchain (zigup default). Old dev builds get
   # garbage-collected from ziglang.org — bump when this 404s.
   ZIG_VERSION: "0.17.0-dev.1970+67f39b551"
-  ZMODU_VERSION: "v0.42.0"
-  ZENT_VERSION: "snap-2026-10-20-2"
+  ZMODU_VERSION: "v0.43.9"
+  ZENT_VERSION: "snap-2026-11-20"
 
 jobs:
   test:
@@ -55,14 +55,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: chy3xyz/zmodu
-          ref: v0.42.0
+          ref: v0.43.9
           path: ../../zig_ws/zigmodu
 
       - name: Checkout zent dependency
         uses: actions/checkout@v4
         with:
           repository: chy3xyz/zent
-          ref: snap-2026-10-20-2
+          ref: snap-2026-11-20
           path: ../../zig_ws/zent
 
       - name: Build
@@ -137,14 +137,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: chy3xyz/zmodu
-          ref: v0.42.0
+          ref: v0.43.9
           path: ../../zig_ws/zigmodu
 
       - name: Checkout zent dependency
         uses: actions/checkout@v4
         with:
           repository: chy3xyz/zent
-          ref: snap-2026-10-20-2
+          ref: snap-2026-11-20
           path: ../../zig_ws/zent
 
       - name: Set up Flutter

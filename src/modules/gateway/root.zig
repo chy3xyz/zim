@@ -2,7 +2,6 @@ const std = @import("std");
 const core = @import("core");
 const zmodu = @import("zmodu");
 const db_mod = @import("../db_postgres.zig");
-const model = @import("model.zig");
 
 pub const info = zmodu.api.Module{
     .name = "gateway",
@@ -18,34 +17,9 @@ pub fn currentMillis() i64 {
     return core.unixNowMillis();
 }
 
-// RTC Meeting in-memory storage
-var rtc_meetings: ?std.StringHashMap(model.RtcMeeting) = null;
-var rtc_participants: ?std.StringHashMap(std.ArrayList(model.RtcParticipant)) = null;
-var rtc_mutex: std.atomic.Mutex = .unlocked;
-
-pub fn rtcLock() void {
-    while (!rtc_mutex.tryLock()) {
-        std.Thread.yield() catch {};
-    }
-}
-
-pub fn rtcUnlock() void {
-    rtc_mutex.unlock();
-}
-
-pub fn getRtcMeetings() *std.StringHashMap(model.RtcMeeting) {
-    if (rtc_meetings == null) {
-        rtc_meetings = std.StringHashMap(model.RtcMeeting).init(core.getGlobalAllocator());
-    }
-    return &rtc_meetings.?;
-}
-
-pub fn getRtcParticipants() *std.StringHashMap(std.ArrayList(model.RtcParticipant)) {
-    if (rtc_participants == null) {
-        rtc_participants = std.StringHashMap(std.ArrayList(model.RtcParticipant)).init(core.getGlobalAllocator());
-    }
-    return &rtc_participants.?;
-}
+// RTC meeting state lives in PostgreSQL since Phase 84
+// (rtc_persistence.zig) — the former in-memory maps were lost on restart
+// and leaked arena pointers across requests.
 
 pub fn generateRoomID(allocator: std.mem.Allocator) ![]const u8 {
     const timestamp = currentMillis();
@@ -86,33 +60,8 @@ pub fn healthJson(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 pub fn deinit() void {
-    // Release RTC in-memory rooms (map + owned strings).
-    if (rtc_meetings) |*m| {
-        var it = m.iterator();
-        while (it.next()) |e| {
-            // `e.value_ptr.room_id` aliases the map key (same pointer) — freed
-            // via the key; freeing both would double-free.
-            core.getGlobalAllocator().free(e.key_ptr.*);
-            core.getGlobalAllocator().free(e.value_ptr.host_user_id);
-            core.getGlobalAllocator().free(e.value_ptr.meeting_name);
-        }
-        m.deinit();
-        rtc_meetings = null;
-    }
-    if (rtc_participants) |*p| {
-        var it = p.iterator();
-        while (it.next()) |e| {
-            // NOTE: `e.key_ptr.*` aliases the meetings map key (same room_id
-            // pointer) — freed there; do NOT free it again here.
-            for (e.value_ptr.items) |pt| {
-                core.getGlobalAllocator().free(pt.user_id);
-                core.getGlobalAllocator().free(pt.nickname);
-            }
-            e.value_ptr.deinit(core.getGlobalAllocator());
-        }
-        p.deinit();
-        rtc_participants = null;
-    }
+    // RTC state lives in PostgreSQL (rtc_persistence.zig) — nothing to
+    // release here beyond the health endpoint.
     if (g_health) |*h| h.deinit();
     g_health = null;
     std.log.info("GatewayModule deinitialized", .{});

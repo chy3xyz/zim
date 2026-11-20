@@ -7,6 +7,8 @@ const friend_mod = @import("../friend.zig");
 const group_mod = @import("../group.zig");
 const model = @import("model.zig");
 const persistence = @import("persistence.zig");
+const zent = @import("zent");
+const zent_db = @import("../../zent_db.zig");
 
 /// Hard cap on message content size (OpenIM default maxContentLength).
 const MAX_MESSAGE_LENGTH = 64 * 1024;
@@ -164,10 +166,8 @@ pub const MessageService = struct {
     /// Insert the message and sync its conversations atomically: a failed sync
     /// rolls the message back (no orphan messages with a stale conversation).
     fn sendInTx(self: *MessageService, input: model.MessageSendInput) !model.Message {
-        var tx = try self.pers.db.begin();
-        errdefer tx.rollback();
-        const msg = try self.pers.sendTx(&tx, input);
         // @所有人 / @具体用户 detection (Go: "AtAllTag" marker + at_user_id_list)
+        // — pure parsing, done before either transaction opens.
         const allocator = core.getAllocator();
         var at_all = false;
         var at_users = std.ArrayList([]const u8).empty;
@@ -188,6 +188,32 @@ pub const MessageService = struct {
                 }
             } else |_| {}
         }
+
+        // zent path (Phase 86): the whole send rides a zent TxClient — the
+        // message insert runs its legacy SQL through the executor adapter on
+        // the transaction connection, and the conversation sync uses the
+        // typed upsert builders on the same transaction. A failed sync rolls
+        // the message back.
+        if (zent_db.getDriver()) |drv| {
+            // TxClient's allocator must match the client the entities were
+            // built from (zent_db's g_allocator): upsert entities are freed
+            // via deinitRow(getAllocator()) — a request arena here would hand
+            // arena-backed strings to the wrong free (SafeAllocator panic).
+            var ztx = try zent.codegen.beginTxFromDriver(zent_db.schema_infos, drv, zent_db.getAllocator());
+            defer ztx.deinit();
+            errdefer ztx.rollback() catch {};
+            const adapter = zent_db.LegacyExecAdapter{ .drv = ztx.tx, .alloc = self.pers.allocator };
+            const msg = try self.pers.sendOn(&adapter, input);
+            try syncConversationZent(&ztx, msg, at_all, at_users.items);
+            try ztx.commit();
+            return msg;
+        }
+
+        // legacy fallback: db_postgres Tx until the zent layer is a hard
+        // requirement (docs/zent-migration.md dual-path pattern).
+        var tx = try self.pers.db.begin();
+        errdefer tx.rollback();
+        const msg = try self.pers.sendTx(&tx, input);
         try syncConversationTx(&tx, msg, at_all, at_users.items);
         try tx.commit();
         return msg;
@@ -400,6 +426,80 @@ fn syncConversationTx(tx: *db_mod.Tx, msg: model.Message, at_all: bool, at_users
             // hide them). Skip the conversation upsert entirely.
             if (msg.content_type == .read_receipt) return;
             try conv_pers.upsertWithLatest(tx, msg.receiver_id, msg.conversation_id, 3, msg.sender_id, "", latest_msg_json, msg.send_time, msg.sender_id, ct, msg.seq, 0);
+        },
+    }
+}
+
+/// zent-tx twin of syncConversationTx: identical fan-out semantics, executed
+/// through the TxClient — single/notification upserts via the typed builders
+/// on the transaction connection (activates conversation's zent upsert
+/// branch), group fan-out via the batch zent variant on the tx driver.
+fn syncConversationZent(tx: *zent_db.TxClientType, msg: model.Message, at_all: bool, at_users: []const []const u8) !void {
+    const allocator = core.getAllocator();
+
+    const latest_msg_json = try std.fmt.allocPrint(allocator, "{{\"clientMsgID\":\"{s}\",\"serverMsgID\":\"{s}\",\"sendID\":\"{s}\",\"recvID\":\"{s}\",\"groupID\":\"{s}\",\"content\":\"{s}\",\"seq\":{d},\"sendTime\":{d},\"contentType\":{d}}}", .{
+        msg.client_msg_id,
+        msg.server_msg_id,
+        msg.sender_id,
+        msg.receiver_id,
+        msg.group_id,
+        msg.content,
+        msg.seq,
+        msg.send_time,
+        @backingInt(msg.content_type),
+    });
+    defer allocator.free(latest_msg_json);
+
+    const conv_pers = conversation_mod.getStorage();
+    const ct = @backingInt(msg.content_type);
+    switch (msg.session_type) {
+        .single => {
+            const user_ids = [_][]const u8{ msg.sender_id, msg.receiver_id };
+            for (user_ids) |uid| {
+                const other_id = if (std.mem.eql(u8, uid, msg.sender_id)) msg.receiver_id else msg.sender_id;
+                const conv_id = try model.getConversationID(msg.sender_id, msg.receiver_id, "", .single, false);
+                defer allocator.free(conv_id);
+                try conv_pers.upsertWithLatest(tx.client, uid, conv_id, 1, other_id, "", latest_msg_json, msg.send_time, msg.sender_id, ct, msg.seq, 0);
+            }
+        },
+        .group => {
+            const conv_id = try model.getConversationID("", "", msg.group_id, .group, false);
+            defer allocator.free(conv_id);
+            var targets = std.StringHashMap(i16).init(allocator);
+            defer targets.deinit();
+            try targets.put(msg.sender_id, if (at_all) 2 else 0);
+            const members = group_mod.getGroupMembers(msg.group_id) catch return;
+            for (members) |m| {
+                if (std.mem.eql(u8, m.user_id, msg.sender_id)) continue;
+                try targets.put(m.user_id, if (at_all) 2 else 0);
+            }
+            for (at_users) |uid| {
+                if (std.mem.eql(u8, uid, msg.sender_id)) continue;
+                try targets.put(uid, 3);
+            }
+            var upserts = std.ArrayList(conversation_mod.ConversationStorage.UpsertItem).empty;
+            defer upserts.deinit(allocator);
+            var it = targets.iterator();
+            while (it.next()) |entry| {
+                try upserts.append(allocator, .{
+                    .owner_user_id = entry.key_ptr.*,
+                    .conversation_id = conv_id,
+                    .conversation_type = 2,
+                    .user_id = msg.sender_id,
+                    .group_id = msg.group_id,
+                    .latest_msg = latest_msg_json,
+                    .latest_send_time = msg.send_time,
+                    .latest_send_id = msg.sender_id,
+                    .latest_content_type = ct,
+                    .max_seq = msg.seq,
+                    .group_at_type = entry.value_ptr.*,
+                });
+            }
+            try conv_pers.upsertWithLatestBatchZent(tx.tx, upserts.items);
+        },
+        .notification => {
+            if (msg.content_type == .read_receipt) return;
+            try conv_pers.upsertWithLatest(tx.client, msg.receiver_id, msg.conversation_id, 3, msg.sender_id, "", latest_msg_json, msg.send_time, msg.sender_id, ct, msg.seq, 0);
         },
     }
 }

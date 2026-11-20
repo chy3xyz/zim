@@ -6,6 +6,7 @@ const friend_mod = @import("../friend.zig");
 const office_mod = @import("../office.zig");
 const organization_mod = @import("../organization.zig");
 const third_mod = @import("../third.zig");
+const gw_model = @import("model.zig");
 
 // JSON DTO helpers for camelCase serialization (shared by gateway handlers)
 pub fn userToJson(user: user_mod.User) struct {
@@ -517,5 +518,25 @@ pub fn userCommandToJson(c: user_mod.UserCommand) struct {
         .commandID = c.command_id,
         .commandValue = c.command_value,
         .createTime = c.create_time,
+    };
+}
+
+pub fn meetingToJson(m: gw_model.RtcMeeting) struct {
+    roomID: []const u8,
+    meetingName: []const u8,
+    hostUserID: []const u8,
+    status: i32,
+    createTime: i64,
+    layout: i32,
+    recordID: ?[]const u8,
+} {
+    return .{
+        .roomID = m.room_id,
+        .meetingName = m.meeting_name,
+        .hostUserID = m.host_user_id,
+        .status = m.status,
+        .createTime = m.create_time,
+        .layout = m.layout,
+        .recordID = m.record_id,
     };
 }

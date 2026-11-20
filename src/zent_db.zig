@@ -19,6 +19,7 @@
 const std = @import("std");
 const zent = @import("zent");
 const schemas = @import("zent_schemas.zig");
+const db_mod = @import("modules/db_postgres.zig");
 
 const graph = zent.codegen.graph.buildGraph(schemas.all);
 pub const ClientType = zent.codegen.client.Client(graph.types);
@@ -91,6 +92,94 @@ pub fn init(
     g_allocator = allocator;
     g_initialized = true;
 }
+
+/// Legacy-executor adapter: wraps a zent Driver behind the db_postgres
+/// executor interface (queryParams/execParams/query) so persistence code
+/// written for `*PostgresClient` / `*db_mod.Tx` runs unmodified on the zent
+/// pool — inside a TxClient transaction this keeps multi-statement atomicity
+/// on one connection while the SQL migrates to typed builders incrementally.
+///
+/// Result strings are duplicated into `alloc` (the caller's free loops own
+/// them) — the zent Rows backing memory dies at rows.deinit(), and handing
+/// out borrowed spans would recreate the Phase 60 use-after-free class.
+pub const LegacyExecAdapter = struct {
+    // sql_driver.Tx and Driver share the query/exec surface; the adapter
+    // serves the transaction path, so it binds the Tx handle.
+    drv: zent.sql_driver.Tx,
+    alloc: std.mem.Allocator,
+
+    fn toValue(p: db_mod.QueryParam) zent.sql.Value {
+        return switch (p) {
+            .string => |v| .{ .string = v },
+            .int, .bigint => |v| .{ .int = v },
+            .smallint => |v| .{ .int = v },
+            .bool => |v| .{ .bool = v },
+            // No caller in the zent-tx slice passes arrays; fail loud rather
+            // than silently writing NULL through the adapter.
+            .string_array => @panic("string_array unsupported through LegacyExecAdapter"),
+            .null => .null,
+        };
+    }
+
+    fn rowsToResult(self: *const LegacyExecAdapter, rows: *zent.sql_driver.Rows) !db_mod.QueryResult {
+        var list = std.ArrayList([]const []const u8).empty;
+        errdefer {
+            for (list.items) |row| {
+                for (row) |cell| self.alloc.free(cell);
+                self.alloc.free(row);
+            }
+            list.deinit(self.alloc);
+        }
+        while (rows.next()) |row| {
+            const n = row.columnCount();
+            const cells = try self.alloc.alloc([]const u8, n);
+            errdefer self.alloc.free(cells);
+            for (0..n) |i| {
+                const text = row.getText(i) orelse "";
+                cells[i] = try self.alloc.dupe(u8, text);
+            }
+            try list.append(self.alloc, cells);
+        }
+        if (rows.nextError()) |err| return err;
+        const row_count = list.items.len;
+        return db_mod.QueryResult{
+            .rows = try list.toOwnedSlice(self.alloc),
+            .row_count = row_count,
+            .affected_rows = 0,
+        };
+    }
+
+    pub fn queryParams(self: *const LegacyExecAdapter, sql_text: []const u8, params: []const db_mod.QueryParam) !db_mod.QueryResult {
+        const values = try self.alloc.alloc(zent.sql.Value, params.len);
+        defer self.alloc.free(values);
+        for (params, 0..) |p, i| values[i] = toValue(p);
+        var rows = try self.drv.query(sql_text, values);
+        defer rows.deinit();
+        return rowsToResult(self, &rows);
+    }
+
+    pub fn execParams(self: *const LegacyExecAdapter, sql_text: []const u8, params: []const db_mod.QueryParam) !usize {
+        const values = try self.alloc.alloc(zent.sql.Value, params.len);
+        defer self.alloc.free(values);
+        for (params, 0..) |p, i| values[i] = toValue(p);
+        const res = try self.drv.exec(sql_text, values);
+        return res.rows_affected;
+    }
+
+    pub fn query(self: *const LegacyExecAdapter, sql_text: []const u8) !db_mod.QueryResult {
+        var rows = try self.drv.query(sql_text, &.{});
+        defer rows.deinit();
+        return rowsToResult(self, &rows);
+    }
+
+    pub fn exec(self: *const LegacyExecAdapter, sql_text: []const u8) !usize {
+        const res = try self.drv.exec(sql_text, &.{});
+        return res.rows_affected;
+    }
+};
+
+/// TxClient view for the zent transaction channel (sendInTx slice).
+pub const TxClientType = zent.codegen.client.TxClient(schema_infos);
 
 pub fn deinit() void {
     if (!g_initialized) return;

@@ -3,6 +3,8 @@ const core = @import("core");
 const event_bus_mod = @import("../event_bus.zig");
 const model = @import("model.zig");
 const persistence = @import("persistence.zig");
+const zent = @import("zent");
+const zent_db = @import("../../zent_db.zig");
 
 pub const GroupService = struct {
     allocator: std.mem.Allocator,
@@ -53,10 +55,19 @@ pub const GroupService = struct {
     /// Batch-invite members in one transaction: all rows commit or none do.
     pub fn addMembers(self: *GroupService, group_id: []const u8, user_ids: []const []const u8, inviter: []const u8) !void {
         if (user_ids.len == 0) return;
-        var tx = try self.pers.db.begin();
-        errdefer tx.rollback();
-        try self.pers.addMembersTx(&tx, group_id, user_ids, inviter);
-        try tx.commit();
+        if (zent_db.getDriver()) |drv| {
+            var ztx = try zent.codegen.beginTxFromDriver(zent_db.schema_infos, drv, zent_db.getAllocator());
+            defer ztx.deinit();
+            errdefer ztx.rollback() catch {};
+            const adapter = zent_db.LegacyExecAdapter{ .drv = ztx.tx, .alloc = self.pers.allocator };
+            try self.pers.addMembersTx(&adapter, group_id, user_ids, inviter);
+            try ztx.commit();
+        } else {
+            var tx = try self.pers.db.begin();
+            errdefer tx.rollback();
+            try self.pers.addMembersTx(&tx, group_id, user_ids, inviter);
+            try tx.commit();
+        }
         // Events fire after the commit; each payload is freed immediately.
         for (user_ids) |uid| {
             const eb = event_bus_mod.getEventBus();
@@ -96,10 +107,19 @@ pub const GroupService = struct {
         if (old.role_level != @backingInt(model.MemberRole.owner)) return error.NotOwner;
         _ = self.pers.getMember(group_id, new_owner) orelse return error.NewOwnerNotMember;
 
-        var tx = try self.pers.db.begin();
-        errdefer tx.rollback();
-        try self.pers.transferOwnerTx(&tx, group_id, old_owner, new_owner);
-        try tx.commit();
+        if (zent_db.getDriver()) |drv| {
+            var ztx = try zent.codegen.beginTxFromDriver(zent_db.schema_infos, drv, zent_db.getAllocator());
+            defer ztx.deinit();
+            errdefer ztx.rollback() catch {};
+            const adapter = zent_db.LegacyExecAdapter{ .drv = ztx.tx, .alloc = self.pers.allocator };
+            try self.pers.transferOwnerTx(&adapter, group_id, old_owner, new_owner);
+            try ztx.commit();
+        } else {
+            var tx = try self.pers.db.begin();
+            errdefer tx.rollback();
+            try self.pers.transferOwnerTx(&tx, group_id, old_owner, new_owner);
+            try tx.commit();
+        }
 
         // Role-change events fire after the commit.
         const eb = event_bus_mod.getEventBus();

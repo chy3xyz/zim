@@ -185,7 +185,7 @@ pub const MessagePersistence = struct {
         return self.sendOn(tx, input);
     }
 
-    fn sendOn(self: *MessagePersistence, exec: anytype, input: model.MessageSendInput) !model.Message {
+    pub fn sendOn(self: *MessagePersistence, exec: anytype, input: model.MessageSendInput) !model.Message {
         const client_msg_id = try generateMsgID(self.allocator);
         const server_msg_id = try generateMsgID(self.allocator);
         const is_notification = input.options.is_not_notification;

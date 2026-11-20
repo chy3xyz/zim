@@ -238,17 +238,21 @@ pub fn main(init: std.process.Init) !void {
 
     // Initialize core infrastructure first (before zmodu Application)
     try core.init(allocator, init.io);
+    // crontask worker thread spawns in its module start() — its io must be
+    // set before that or the 1s-slice loop spins unslept (and the non-atomic
+    // read may stay hoisted at null for the thread's lifetime).
+    crontask.setIo(init.io);
     core.initMetrics();
 
     core.logInfo("========================================", .{});
     core.logInfo("  ZIM Server v0.4.0 (Modulith)", .{});
     core.logInfo("  OpenIM Server Rewrite in Zig", .{});
-    core.logInfo("  Framework: zmodu v0.42.0", .{});
+    core.logInfo("  Framework: zmodu v0.43.9", .{});
     core.logInfo("  Mode: Deep Integration (ThreadSafeEventBus + WorkerPool + RuntimeOptions)", .{});
     core.logInfo("========================================", .{});
 
     // Structured startup event (readable JSON) — same sink as access logs.
-    core.logJson(.{ .event = "zim_startup", .version = "0.4.0", .framework = "zmodu-0.42.0", .mode = "modulith" });
+    core.logJson(.{ .event = "zim_startup", .version = "0.4.0", .framework = "zmodu-0.43.9", .mode = "modulith" });
 
     // Initialize Application using the zmodu ApplicationBuilder (fluent API)
     var app_builder = zmodu.builder(allocator, init.io);
@@ -339,9 +343,6 @@ pub fn main(init: std.process.Init) !void {
         .region = cfg.object_storage.region,
         .use_ssl = cfg.object_storage.use_ssl,
     }, db_postgres.getClient(), allocator);
-
-    // Pass Io to crontask for webhook delivery
-    crontask.setIo(init.io);
 
     // Subscribe to cross-module events
     try subscribeEvents();

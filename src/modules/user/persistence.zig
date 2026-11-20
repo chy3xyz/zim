@@ -181,6 +181,22 @@ pub const UserPersistence = struct {
     pub fn delete(self: *UserPersistence, user_id: []const u8) bool {
         // Atomic cascade: user + tokens + friendships + requests + blacks +
         // conversations + commands + online status.
+        if (zent_db.getDriver()) |drv| {
+            var ztx = zent.codegen.beginTxFromDriver(zent_db.schema_infos, drv, zent_db.getAllocator()) catch return false;
+            defer ztx.deinit();
+            errdefer ztx.rollback() catch {};
+            const adapter = zent_db.LegacyExecAdapter{ .drv = ztx.tx, .alloc = self.allocator };
+            _ = adapter.execParams("DELETE FROM auth_tokens WHERE user_id = $1", &.{.{ .string = user_id }}) catch return false;
+            _ = adapter.execParams("DELETE FROM friends WHERE owner_user_id = $1 OR friend_user_id = $1", &.{.{ .string = user_id }}) catch return false;
+            _ = adapter.execParams("DELETE FROM friend_requests WHERE from_user_id = $1 OR to_user_id = $1", &.{.{ .string = user_id }}) catch return false;
+            _ = adapter.execParams("DELETE FROM blacks WHERE owner_user_id = $1 OR block_user_id = $1", &.{.{ .string = user_id }}) catch return false;
+            _ = adapter.execParams("DELETE FROM conversations WHERE owner_user_id = $1", &.{.{ .string = user_id }}) catch return false;
+            _ = adapter.execParams("DELETE FROM user_commands WHERE user_id = $1", &.{.{ .string = user_id }}) catch return false;
+            _ = adapter.execParams("DELETE FROM user_online_status WHERE user_id = $1", &.{.{ .string = user_id }}) catch return false;
+            _ = adapter.execParams("DELETE FROM users WHERE user_id = $1", &.{.{ .string = user_id }}) catch return false;
+            ztx.commit() catch return false;
+            return true;
+        }
         var tx = self.db.begin() catch return false;
         errdefer tx.rollback();
         _ = tx.execParams("DELETE FROM auth_tokens WHERE user_id = $1", &.{.{ .string = user_id }}) catch return false;

@@ -67,6 +67,7 @@ zim/
 | websocket | ✓ | WebSocket server + OpenIM protobuf protocol |
 | office | ✓ | Work Moments (enterprise): publish/like/comment/permissions |
 | organization | ✓ | Organization structure (enterprise): departments, recursive query |
+| rtc_persistence | ✓ | RTC meeting state in PostgreSQL (Phase 84): rooms survive restarts, TxClient create/close, stale-room archive on start |
 
 ## Architecture (Modulith)
 
@@ -319,6 +320,56 @@ Edit `config/config.yaml`:
 - **验证**：38/38 全过、CI 6/6 全绿、冒烟横幅 `Framework: zmodu v0.42.0`；Flutter e2e 仍因 SDK 移除未跑（Phase 81 记录）
 - **版本引用**：main.zig 横幅/启动 JSON → `zmodu v0.42.0`；ci.yml ZMODU_VERSION=v0.42.0（env 改名）、ZENT_VERSION=snap-2026-10-20-2、checkout repo → chy3xyz/zmodu（path 保持 zigmodu 目录名对齐 build.zig.zon）
 
+## Phase 83: zmodu v0.42.0 → v0.43.9 + zent v0.97.0 → v0.97.3 升级适配
+
+- **零 API 破坏**：v0.43.x 变化集中在 http 性能（connection-buffer zero-copy parse、栈上 H1 读缓冲、响应写合并、idle timeout、smp_allocator）与 sqlx 整数解码修复；zim `zig build` + 38/38 测试直接通过，一行代码没改
+- **zent v0.97.1-3**（pool mutex 修复 + oldest-borrow 观测 + outbox 时钟）：零改动兼容
+- **修复既有 crontask data race**（升级重编译后暴露，非 zmodu 回归）：`g_io`/`g_running` 是非原子全局——①时序：`crontask.setIo(init.io)` 原在 `app.start()` 之后，模块 start 已 spawn 工作线程，早期 `g_io=null` 时 `if (g_io) |io| sleep` 不成立 → 1s 切片循环**不睡全速空转**（实测 ~70 迭代/秒，几千行日志）；②编译器优化 hoist：线程内非原子加载可被提出循环 → 永远 null。修复：`setIo` 提前到 `app.start()` 前（main.zig，线程 spawn 前保证就绪）+ `g_running` 改 `std.atomic.Value(bool)`（acquire/release 配对）。验证：20 秒日志从数百行 → 1 行（正确节律：内层 300×1s slice = 5 分钟一次外层迭代）
+- **CI 冒烟偶发失败排查（非升级问题）**：WS 冒烟两次失败（register timeout / handshake reset）根因是**残留旧实例进程**——SO_REUSEPORT 下新连接被路由到旧进程被 reset（服务器日志明示 `port 10001 is ALREADY BOUND`）。修复：`scripts/ci.sh` 冒烟步骤启动前 `pkill -f zig-out/bin/zim` 清理。教训：SO_REUSEPORT 让"端口占用"从显式失败变成静默抢流量，本地反复起服务调试后必须确认端口干净
+- **版本引用**：main.zig 横幅/启动 JSON → v0.43.9；ci.yml ZMODU_VERSION=v0.43.9、ZENT_VERSION=snap-2026-11-20（两 job ref 同步）
+- **验证**：38/38 全过、CI 6/6 全绿（含 WS 冒烟）、冒烟横幅 `Framework: zmodu v0.43.9`；Flutter e2e 仍因 SDK 移除未跑（Phase 81 记录）
+
+## Phase 84: RTC 会议持久化（产品级数据可靠性）
+
+- **缺陷**：RTC 19 端点的会议/参与者状态原在进程内存 StringHashMap——重启即全部丢失，且存在 transferHost UAF（请求 arena 字符串赋给全局 map，请求结束悬空；Phase 66 修了 3 个 RTC 内存 bug 漏了这个）
+- **持久化**（migrations/014_rtc_persistence.sql）：
+  - `rtc_meetings`（room_id PK / host / name / status 1=active 2=ended / layout / record_id / create_time / ended_at）+ `rtc_participants`（BIGSERIAL id + UNIQUE(room_id,user_id)）
+  - `gateway/rtc_persistence.zig`：存储选型按 BEST_PRACTICES §1——meeting 走 typed builder（Create/Query，调用方提供文本 pk）、participant 行级小写走 `drv.exec`（UNIQUE 业务键 ON CONFLICT）、读走 sql_scan DTO；DTO 字符串归请求 arena（不用 deinitRow——那是 zent entity 契约，第二次踩后已固化）
+  - **首次实战 TxClient**：`createMeeting`（meeting+host 参与者行原子）/`closeMeeting`（host 校验 + 双表删除原子）用 `beginTxFromDriver` + errdefer rollback；RoomExists 从 pk UniqueViolation 映射
+  - **重启语义**：gateway start 时 `archiveStaleMeetings()` 把遗留 status=1 全部标 ended（服务重启即散会，无僵尸会议）
+- **handler 改造**：19 个函数签名/请求/响应结构不变（snake_case 输出与旧内存实现一致）；错误策略升级为产品级——持久化失败 → 500（原实现吞错），房间不存在保持 200 no-op（契约兼容），create 撞 room_id → 409（原为静默覆盖）
+- **顺带根治**：transferHost 的 host 校验进 SQL（`AND host_user_id = $old`）——请求串不再触达持久化，UAF 类缺陷随内存 map 一起退役；gw_root 的两个 map/自旋锁/双释放注释全部删除
+- **测试**：新增 RTC 生命周期（create→字段回读→重复建房拒绝→幂等 join→参与者 flag 落库→layout/record 持久→SQL 级 host 转让→非 host close 无效→host close 双删）+ 重启归档（create→archiveStaleMeetings→getMeeting null + status=2/ended_at 非空）；**40/40 全过、CI 6/6 全绿**；真实服务验证 create→join→close 全链路（participant 2 行落库、close 后 0 残留）
+- 待办提醒：info 响应仍是 snake_case（与旧实现一致）——RTC 域 camelCase 对齐（`roomID`→响应内嵌 `hostUserID` 等）留作契约轮专项
+
+## Phase 85: RTC 域 camelCase 契约对齐（Go rtc.proto MeetingInfo）
+
+- **契约**：对照 `_ref/.../protocol/rtc/rtc.proto` 的 `MeetingInfo`（roomID/meetingName/hostUserID/createTime camelCase）——`info`/`list` 响应从直接序列化 snake_case 模型改为 `dto.meetingToJson` DTO（roomID/meetingName/hostUserID/status/createTime/layout/recordID，recordID 为 zim 录制扩展的命名风格）；create 端点的 roomID 本就 camelCase 不变，其余 17 端点 data 为 null 无字段面
+- **契约测试升级**：原 Testkit 只断言 create 返回 roomID —— 现覆盖 **create→info→list→close 全链路**（走 Phase 84 持久化路径，IntegrationCtx 已初始化 zent）：断言 info 含全部 camelCase 字段 + **负断言 snake_case 泄漏为零**（host_user_id/meeting_name/room_id 不得出现）；close 后房间移除
+- **验证**：40/40 全过、CI 6/6 全绿；RTC 域契约缺口闭环
+- 顺带：`/rtc-meeting/list` 响应的 `meetings` 数组每项 camelCase 化
+
+## Phase 86: zent 核心域事务迁移切片 A — 发消息事务迁 TxClient
+
+- **事务通道迁移**（`message/service.zig sendInTx` 双轨：zent TxClient 优先，legacy db_postgres Tx 回退，与迁移文档双路径模式一致）：
+  - `LegacyExecAdapter`（zent_db.zig）：把 zent Driver/Tx 包装成 legacy 执行器接口（queryParams/execParams/query）——`sendOn`/`getNextSeqOn` 的 legacy SQL（消息 INSERT..RETURNING、seq 原子分配）经适配器跑在**事务连接**上，SQL 零改动；结果字符串 dupe 进调用方 allocator（防 zent Rows deinit 悬空——Phase 60 教训的适配器版）；`string_array` 参数 fail-loud panic（无调用方，防静默写 NULL）
+  - **conversation typed upsert 激活**（Phase 80 预留分支）：`upsertWithLatest` 三态化——`@TypeOf(exec)==zent_db.ClientType`（TxClient 的 client 视图）→ `upsertWithLatestOnClient`（typed SaveOrUpdateOnWith，GREATEST 单调表达式）；`*PostgresClient` → 同函数（池直连）；否则 legacy。单聊/通知 upsert 与群扇出 `upsertWithLatestBatchZent`（同 batch SQL、zent Value 参数、`tx.exec`）全部在事务连接上
+  - `syncConversationZent`：syncConversationTx 的 zent 孪生（单聊/群/@提及/通知语义逐行对齐）
+- **关键踩坑**：`beginTxFromDriver(infos, drv, allocator)` 的 allocator 决定 **tx.client 的 allocator**（TxClient 内部 makeClient(allocator)）——传请求 arena 会让事务内 typed upsert 返回的 entity 字符串落在 arena，而 `deinitRow` 用 zent_db 的 g_allocator 释放 → 跨 allocator free panic（SafeAllocator "free of invalid memory"，40/40 里 7 个发消息事务测试崩）。修复：TxClient 统一用 `zent_db.getAllocator()`。**规则**：TxClient 的 allocator 必须与实体 deinit 用的 allocator 同源
+- **验证**：40/40 全过（seq 单调/黑名单拦截/已读推进/已读回执不污染/编辑召回等发消息事务测试全部在 zent 事务路径下通过）；CI 6/6 全绿；真实服务验证 send_msg（zent 事务）→ **双方 conversations 行由 typed upsert 落库**（max_seq=1 同步、group_at_type 正确）
+- **范围说明**：本轮为切片 A（发消息事务，最高频路径）。切片 B（建群/删友/解散/注销的 Tx）沿用同一模式（TxClient + adapter）待后续；RTC（Phase 84）已用 TxClient
+
+## Phase 87: zent 核心域事务迁移切片 B — 全部剩余 Tx 绑定路径
+
+- **迁移完成，事务通道切换收官**（模式与切片 A 一致：TxClient + LegacyExecAdapter 跑事务连接上的 legacy SQL，legacy db_postgres Tx 回退保留）：
+  - `friend/persistence.zig`：`respondFriendRequest`（请求已处理+双向好友行原子）、`deleteFriend`（双向删除原子）——SQL/params 提到分支外共用
+  - `group/persistence.zig`：`addMembersTx`/`transferOwnerTx` 签名 `*db_mod.Tx` → `anytype`（legacy Tx 与 adapter 共享 execParams 接口，**同一函数体跑两种通道**，无逻辑复制）；`dismiss`（群+成员+申请三表）内部双轨
+  - `user/persistence.zig`：`delete`（注销 8 表级联）内部双轨
+  - `group/service.zig`：`addMembers`/`transferOwner` 入口双轨（TxClient + adapter 传 `&adapter` 给泛型 Tx 函数）
+- **真实服务全链路验证**：create_group（建群事务成员行落库）→ dismiss_group（三表清零）→ unregister_user（users/conversations 级联清零）——全部 zent 事务路径；40/40 测试全过（好友事务/建群带成员/级联注销等集成测试自动走 zent 分支）、CI 6/6 全绿
+- **迁移状态收官**：全部 8 处多语句原子事务（发消息+会话同步/建群/批量邀请/转让/删好友/接受好友/解散/注销级联）+ RTC create/close 均跑 zent TxClient；**核心域数据栈迁移完成**——剩余 legacy SQL 仅只读/低频路径（惰性迁移，双路径回退长期保留）
+- zent-migration.md 后续更新「迁移模式」节的切片 B 记录
+
 ## 遗留项（Phase 35 之后）
 
 - **gateway handler 已按域拆分**（Phase 49）：`gateway/handlers.zig` 4125 行拆为 298 行骨架 + `handlers/{helpers,auth,account,user,friend,group,message,conversation,encryption,office,organization,third,statistics,rtc,jssdk,health}.zig` 16 个域文件；新增 handler 遵循同结构
@@ -460,7 +511,7 @@ cd src && zig build run
 
 ## Framework
 
-[zmodu](https://github.com/chy3xyz/zmodu) v0.42.0 (原名 ZigModu/zigmodu，v0.41.0 改名；local source `~/w4_proj/zig_ws/zigmodu`，目录名未随仓库改；v0.39.11→42.0 含 RouteGroup 移除/运行时注册收敛 Scoped、h2 fast path、AI 子系统大幅扩展；Zig toolchain 0.17.0-dev.1970) provides:
+[zmodu](https://github.com/chy3xyz/zmodu) v0.43.9 (原名 ZigModu/zigmodu，v0.41.0 改名；local source `~/w4_proj/zig_ws/zigmodu`，目录名未随仓库改；v0.42→43.9 含 http zero-copy 解析/响应写合并/idle timeout/smp_allocator、sqlx 整数解码修复；Zig toolchain 0.17.0-dev.1970) provides:
 - Module system with lifecycle (init/deinit)
 - Dependency validation at startup
 - Event bus (`TypedEventBus`, `ThreadSafeEventBus`) for decoupled communication
@@ -480,14 +531,14 @@ cd src && zig build run
 
 ## ORM (zent)
 
-[zent](https://github.com/chy3xyz/zent) v0.97.0 (local pin `snap-2026-10-20-2`, local source `~/w4_proj/zig_ws/zent`; v0.84+ 文本主键须调用方提供 —— conversation upsert 已适配) — Zig Entity Framework, pilot wired alongside the legacy `db_postgres` client (see `docs/zent-migration.md`):
+[zent](https://github.com/chy3xyz/zent) v0.97.3 (local pin `snap-2026-11-20`, local source `~/w4_proj/zig_ws/zent`; v0.84+ 文本主键须调用方提供 —— conversation upsert 已适配) — Zig Entity Framework, pilot wired alongside the legacy `db_postgres` client (see `docs/zent-migration.md`):
 
 - `src/zent_schemas.zig` — Schema-as-Code mirrors of existing tables (User, Collect; SELECT is column-list based; undeclared DB columns are never touched; migrations stay the DDL source of truth)
 - `src/zent_db.zig` — `ConnPool(PostgresDriver)` + typed client holder (`getClient()`) + pooled driver view (`getDriver()`, for `sql_scan` raw-DTO queries), config strings duped for hot-reload safety
 - **Migration pattern (Phase 77)**: dual-path — migrated persistence methods prefer zent (`getClient()`/`getDriver()` non-null) and fall back to legacy db_postgres when the layer is down; `IntegrationCtx` inits zent whenever PG is reachable so integration tests always exercise the zent path
 - Concurrency rules: client must sit on the pool (never a shared single driver — wire protocol races); `health_check_on_borrow=false` (ping-under-mutex deadlock)
 - Memory contract: entity rows are owned — free via `zent_db.deinitRow(info, &row)`, row `TypeInfo` via `@TypeOf(client.user).entity_info`; `sql_scan.queryAll/queryOne` DTO results duplicate strings into the caller's allocator (request arena in prod — same contract as the legacy dupe loops they replaced)
-- Migration status: low-conflict tier complete (Phase 77-79) + conversations (Phase 80, first core-domain slice: typed `SaveOrUpdateOnWith` business-key upsert with GREATEST monotonic exprs); remaining: searchLogs, users/friends/groups/messages bulk + Tx-bound paths (TxClient + `forUpdateWith` row locks; conversation zent upsert branch activates with the TxClient migration); each step must keep 38 tests + CI gates green
+- Migration status: **all 8 multi-statement transactions on TxClient** (message-send+conversation-sync Phase 86; group create/batch-invite/transfer/dismiss, friend accept/delete, user revoke cascade Phase 87; RTC create/close Phase 84) — `LegacyExecAdapter` runs legacy SQL on the tx connection while conversation upserts use typed `SaveOrUpdateOnWith` in-transaction. Remaining legacy SQL is read-only/low-frequency paths (lazy migration; dual-path fallback retained). **TxClient allocator rule: must match entity-free allocator (`zent_db.getAllocator()`)**. Each step must keep 40 tests + CI gates green
 
 ## Code Generator (zmodu)
 
