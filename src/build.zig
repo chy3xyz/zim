@@ -113,6 +113,7 @@ pub fn build(b: *std.Build) void {
     });
     bench_mod.addImport("zmodu", zmodu_dep.module("zmodu"));
     bench_mod.addImport("libpq", libpq_mod);
+    bench_mod.addImport("zent", zent_dep.module("zent"));
     bench_mod.addImport("core", core_module);
     bench_mod.addImport("protobuf", proto_module);
     bench_mod.addImport("sdkws", sdkws_module);

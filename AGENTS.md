@@ -369,6 +369,8 @@ Edit `config/config.yaml`:
 - **真实服务全链路验证**：create_group（建群事务成员行落库）→ dismiss_group（三表清零）→ unregister_user（users/conversations 级联清零）——全部 zent 事务路径；40/40 测试全过（好友事务/建群带成员/级联注销等集成测试自动走 zent 分支）、CI 6/6 全绿
 - **迁移状态收官**：全部 8 处多语句原子事务（发消息+会话同步/建群/批量邀请/转让/删好友/接受好友/解散/注销级联）+ RTC create/close 均跑 zent TxClient；**核心域数据栈迁移完成**——剩余 legacy SQL 仅只读/低频路径（惰性迁移，双路径回退长期保留）
 - zent-migration.md 后续更新「迁移模式」节的切片 B 记录
+- **ReleaseFast 基线复测（Phase 87 后）**：login 75-78 / friend 2667 / group 2632-2740 / msg 1070-1111 ops/s —— 零回归，msg +61~67%、group +49~55%（旧基线的 664/1770 系噪声低估）；docs/benchmark.md 已更新口径表
+- 本轮提交：5a70cca（Phase 83-87）
 
 ## 遗留项（Phase 35 之后）
 
