@@ -67,7 +67,15 @@ jobs:
         with:
           repository: chy3xyz/zent
           ref: snap-2026-11-20
-          path: ../../zig_ws/zent
+          path: zig_ws/zent
+
+      - name: Map dependency paths for build.zig.zon
+        # src/../zig_ws must exist outside the workspace dir; point it at the
+        # in-workspace checkouts via symlinks.
+        run: |
+          mkdir -p ../zig_ws
+          ln -s "$GITHUB_WORKSPACE/zig_ws/zigmodu" ../zig_ws/zigmodu
+          ln -s "$GITHUB_WORKSPACE/zig_ws/zent" ../zig_ws/zent
 
       - name: Build
         working-directory: src
@@ -152,7 +160,7 @@ jobs:
         with:
           repository: chy3xyz/zent
           ref: snap-2026-11-20
-          path: ../../zig_ws/zent
+          path: zig_ws/zent
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
