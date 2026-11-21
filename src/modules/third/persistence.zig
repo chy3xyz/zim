@@ -96,6 +96,56 @@ pub const ThirdPersistence = struct {
     }
 
     pub fn searchLogs(self: *ThirdPersistence, allocator: std.mem.Allocator, user_id: ?[]const u8, platform: ?i32, start_time: ?i64, end_time: ?i64, page_number: i32, show_number: i32) !model.SearchLogsResult {
+        // zent path (Phase 88): dynamic WHERE with zent Value args through the
+        // pooled driver; aliased epoch column scans straight into model.LogEntry.
+        if (zent_db.getDriver()) |drv| {
+            var where_clause = std.ArrayList(u8).empty;
+            defer where_clause.deinit(allocator);
+            try where_clause.appendSlice(allocator, " WHERE 1=1");
+            var args = std.ArrayList(zent.sql.Value).empty;
+            defer args.deinit(allocator);
+            var idx: i32 = 1;
+
+            if (user_id) |uid| {
+                try where_clause.print(allocator, " AND user_id = ${d}", .{idx});
+                try args.append(allocator, .{ .string = uid });
+                idx += 1;
+            }
+            if (platform) |p| {
+                try where_clause.print(allocator, " AND platform = ${d}", .{idx});
+                try args.append(allocator, .{ .int = p });
+                idx += 1;
+            }
+            if (start_time) |st| {
+                try where_clause.print(allocator, " AND EXTRACT(EPOCH FROM created_at)::bigint >= ${d}", .{idx});
+                try args.append(allocator, .{ .int = st });
+                idx += 1;
+            }
+            if (end_time) |et| {
+                try where_clause.print(allocator, " AND EXTRACT(EPOCH FROM created_at)::bigint <= ${d}", .{idx});
+                try args.append(allocator, .{ .int = et });
+                idx += 1;
+            }
+
+            const count_sql = try std.fmt.allocPrint(allocator, "SELECT COUNT(*) AS total FROM app_logs{s}", .{where_clause.items});
+            defer allocator.free(count_sql);
+            const count_row = (zent.sql_scan.queryOne(struct { total: i64 }, allocator, drv, count_sql, args.items) catch return error.DatabaseError) orelse return error.DatabaseError;
+            const total: i32 = @intCast(count_row.total);
+
+            const offset = (page_number - 1) * show_number;
+            const sql = try std.fmt.allocPrint(allocator, "SELECT user_id, platform, file_url, EXTRACT(EPOCH FROM created_at)::bigint AS created_at FROM app_logs{s} ORDER BY created_at DESC LIMIT ${d} OFFSET ${d}", .{ where_clause.items, idx, idx + 1 });
+            defer allocator.free(sql);
+            var page_args = std.ArrayList(zent.sql.Value).empty;
+            defer page_args.deinit(allocator);
+            try page_args.appendSlice(allocator, args.items);
+            try page_args.append(allocator, .{ .int = show_number });
+            try page_args.append(allocator, .{ .int = offset });
+
+            var rows = try zent.sql_scan.queryAll(model.LogEntry, allocator, drv, sql, page_args.items);
+            const logs = try rows.toOwnedSlice();
+            return model.SearchLogsResult{ .logs = logs, .total = total };
+        }
+
         const db = self.db orelse return error.NotInitialized;
 
         var where_clause = std.ArrayList(u8).empty;

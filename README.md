@@ -72,6 +72,10 @@ AGENTS.md       Full development log (87 phases, AI-paired)
 - `ui/zimapp` is based on the OpenIM Flutter demo (Apache-2.0 — see [ui/zimapp/NOTICE.md](ui/zimapp/NOTICE.md))
 - `ui/admin` is based on ant-design-pro (MIT — see [ui/admin/NOTICE.md](ui/admin/NOTICE.md))
 
+## Contributing & security
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) (ground rules: dual-path persistence, allocator discipline, parameterized SQL, tests required) and [SECURITY.md](SECURITY.md) (private vulnerability reporting).
+
 ## License
 
 [MIT](LICENSE)

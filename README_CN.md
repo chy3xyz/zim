@@ -72,6 +72,10 @@ AGENTS.md       开发全记录（87 个 Phase）
 - `ui/zimapp` 基于 OpenIM Flutter demo（Apache-2.0 — 见 [ui/zimapp/NOTICE.md](ui/zimapp/NOTICE.md)）
 - `ui/admin` 基于 ant-design-pro（MIT — 见 [ui/admin/NOTICE.md](ui/admin/NOTICE.md)）
 
+## 参与贡献与安全
+
+见 [CONTRIBUTING.md](CONTRIBUTING.md)（贡献守则：双路径持久化、分配器纪律、参数化 SQL、变更须带测试）与 [SECURITY.md](SECURITY.md)（漏洞私下报告渠道）。
+
 ## 许可证
 
 [MIT](LICENSE)
