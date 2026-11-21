@@ -486,7 +486,14 @@ var g_log_mutex: std.atomic.Mutex = .unlocked;
 extern "c" fn rename(old_path: [*:0]const u8, new_path: [*:0]const u8) c_int;
 extern "c" fn open(path: [*:0]const u8, flags: c_int, ...) c_int;
 // macOS flags: O_RDWR=0x0002, O_CREAT=0x0200, O_APPEND=0x0008 (project is macOS-only)
-const O_RDWR_CREAT_APPEND: c_int = 0x0002 | 0x0200 | 0x0008;
+// O_RDWR | O_CREAT | O_APPEND — the raw values differ per libc (macOS
+// O_CREAT=0x0200/O_APPEND=0x0008, Linux O_CREAT=0x40/O_APPEND=0x400). The
+// macOS-only constant made open() return ENOENT on Linux for a missing
+// file (CI-caught; local mac had a leftover file masking it).
+const O_RDWR_CREAT_APPEND: c_int = switch (@import("builtin").os.tag) {
+    .macos => 0x0002 | 0x0200 | 0x0008,
+    else => 0x0002 | 0x0040 | 0x0400,
+};
 
 /// Enable JSON log file output with size-based rotation (`<path>.1`).
 /// Call once at startup; threads-safe for concurrent logJson writers.
