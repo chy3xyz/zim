@@ -487,6 +487,7 @@ fn handleWSSendSignalMsg(client: *WSClient, req_id: i32, msg_incr: []const u8, o
         }
     }
 
+    // Echo the signal back to the sender so clients can confirm delivery.
     model.sendWSResponse(client, req_id, msg_incr, operation_id, 0, "", resp_bytes);
 }
 

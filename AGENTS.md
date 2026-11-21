@@ -382,7 +382,9 @@ Edit `config/config.yaml`:
 - **结构化日志**：访问日志已是每请求一行 JSON（std.log 输出）；其余模块仍为 `std.log` 风格，如需要可接 zigmodu `StructuredLogger`（修复其 bug 后）或继续 std.log JSON
 - **功能对照**：消息分页/搜索增强、群公告/@提及、RTC 持久化等见 `docs/go-zig-gap-analysis.md` 与 `docs/improvement-plan.md`
 - **CI 门禁**：`scripts/ci.sh` 一键五步门禁（build/test/fmt/audit/deadcode），zmodu 优先用 `.zmodu-build/bin/zmodu`（本地构建 v0.15.9，含 audit/deadcode）否则 PATH
-- 约束提醒：新增路由直接写原生 `http.Context` 风格；zigmodu 本地源码需保持 binary 帧支持（`WsMessageFn(session, msg, kind)`）；`config.yaml` 为 `[section]` INI 风格；新迁移文件放到 `migrations/`，启动时自动应用
+- 约束提醒：新增路由直接写原生 `http.Context` 风格；zmodu 本地源码需保持 binary 帧支持（`WsMessageFn(session, msg, kind)`）；`config.yaml` 为 `[section]` INI 风格；新迁移文件放到 `migrations/`，启动时自动应用
+- **已落地专项（从遗留清单移除）**：配置热加载（Phase 65）、日志文件+轮转（Phase 64）、WS 真实连接测试（`scripts/ws_smoke.py`，Phase 70 起 CI 冒烟）、zent 迁移核心域事务（Phase 86-87 收官）、RTC 持久化（Phase 84）、可观测性（Phase 66 metrics/慢查询）
+- **仍开放专项**：①WS 信令 1004 投递范围收窄（现为全网 authenticated 广播；已尝试用 `rtc_persistence.getParticipantIds` 收窄至房间参与者并回退——python 验证端需手写 SignalReq protobuf 编码（字段 1=room_id/2=signal_type/3=user_id/4=data，varint/bytes 均已验证可行），阻塞点是测试环境的端口分流干扰，需干净环境复验）；②Webhook 动态回调（BeforeSendMsg 响应驱动）与 attentionIds 之外的过滤；③已读回执通知（Phase 59 遗留的 libpq RETURNING 乱码专项——Phase 60 已修 UAF 根因，可重启尝试）；④chat 管理服务（open-im-chat，超 IM 边界）
 
 ### Event Bus
 
@@ -476,6 +478,9 @@ All API responses are camelCase to match OpenIM SDK expectations:
   - `1002` PullMsgBySeqList
   - `1003` SendMsg
   - `1005` PullMsg/GetSeqMessage
+  - `1006` GetConvMaxReadSeq
+  - `1007` PullConvLastMessage
+  - `1004` SendSignalMsg (RTC signaling relay)
   - `2001` PushMsg (server → client protobuf push)
   - `2002` KickOnlineMsg
   - `2003` LogoutMsg
