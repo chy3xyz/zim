@@ -9,6 +9,7 @@ zig-out/
 .DS_Store
 .codegraph/
 .cursor/
+reasonix.toml
 
 # Reference implementations (external, read-only)
 _ref/
@@ -19,3 +20,5 @@ ui/**/build/
 ui/**/.dart_tool/
 ui/**/Pods/
 *.log
+*.jsonl
+*.jsonl.*
