@@ -60,7 +60,7 @@ jobs:
         with:
           repository: chy3xyz/zmodu
           ref: v0.43.9
-          path: ../../zig_ws/zigmodu
+          path: zig_ws/zigmodu
 
       - name: Checkout zent dependency
         uses: actions/checkout@v4
@@ -153,7 +153,7 @@ jobs:
         with:
           repository: chy3xyz/zmodu
           ref: v0.43.9
-          path: ../../zig_ws/zigmodu
+          path: zig_ws/zigmodu
 
       - name: Checkout zent dependency
         uses: actions/checkout@v4
