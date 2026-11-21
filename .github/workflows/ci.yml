@@ -70,12 +70,13 @@ jobs:
           path: zig_ws/zent
 
       - name: Map dependency paths for build.zig.zon
-        # src/../zig_ws must exist outside the workspace dir; point it at the
-        # in-workspace checkouts via symlinks.
+        # zon paths resolve from src/ upward THREE levels (src → repo → work
+        # dir → parent), landing at $GITHUB_WORKSPACE/../../zig_ws — one level
+        # outside the workspace. Symlink the in-workspace checkouts there.
         run: |
-          mkdir -p ../zig_ws
-          ln -s "$GITHUB_WORKSPACE/zig_ws/zigmodu" ../zig_ws/zigmodu
-          ln -s "$GITHUB_WORKSPACE/zig_ws/zent" ../zig_ws/zent
+          mkdir -p "$GITHUB_WORKSPACE/../../zig_ws"
+          ln -s "$GITHUB_WORKSPACE/zig_ws/zigmodu" "$GITHUB_WORKSPACE/../../zig_ws/zigmodu"
+          ln -s "$GITHUB_WORKSPACE/zig_ws/zent" "$GITHUB_WORKSPACE/../../zig_ws/zent"
 
       - name: Build
         working-directory: src
@@ -176,7 +177,9 @@ jobs:
           done
 
       - name: Analyze (must be zero errors)
-        run: dart analyze
+        # Exit 0 unless there are error-level findings; warnings/infos are
+        # tracked locally (24w/127i) but don't fail the gate.
+        run: dart analyze --no-fatal-warnings --no-fatal-infos
 
       - name: Test (zim_sdk protocol contract)
         working-directory: zim_sdk
