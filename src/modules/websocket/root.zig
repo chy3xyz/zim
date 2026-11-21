@@ -656,6 +656,9 @@ fn handleWSSubUserOnlineStatus(client: *WSClient, req_id: i32, msg_incr: []const
 }
 
 pub fn isUserBackground(user_id: []const u8) bool {
+    // g_clients is `undefined` until module init — event subscribers (push)
+    // may call this without the websocket module started.
+    if (!g_initialized) return false;
     lockMutex();
     defer g_clients_mutex.unlock();
     if (g_clients.get(user_id)) |clients| {
@@ -668,6 +671,7 @@ pub fn isUserBackground(user_id: []const u8) bool {
 }
 
 pub fn pushOnlineStatusChange(user_id: []const u8, online: bool, platform_id: i32) void {
+    if (!g_initialized) return;
     lockSubMutex();
     defer g_online_subscribers_mutex.unlock();
 
@@ -757,6 +761,7 @@ fn handleLogin(client: *WSClient, params: std.json.ObjectMap) void {
 
 // Push message to specific user if online (legacy text push)
 pub fn pushToUser(user_id: []const u8, message: []const u8) void {
+    if (!g_initialized) return;
     lockMutex();
     defer g_clients_mutex.unlock();
 
@@ -769,6 +774,7 @@ pub fn pushToUser(user_id: []const u8, message: []const u8) void {
 }
 
 pub fn pushToUsers(user_ids: []const []const u8, message: []const u8) void {
+    if (!g_initialized) return;
     for (user_ids) |user_id| {
         pushToUser(user_id, message);
     }

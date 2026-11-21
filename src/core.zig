@@ -496,7 +496,13 @@ pub fn initLogFile(path: []const u8, max_size: u64) !void {
     const path_z = tryZ(path) orelse return error.OpenFailed;
     defer g_allocator.free(path_z);
     const fd = open(path_z.ptr, O_RDWR_CREAT_APPEND, @as(c_uint, 0o644));
-    if (fd < 0) return error.OpenFailed;
+    if (fd < 0) {
+        // Surface errno on the failing path — Linux/macOS differ in what
+        // makes libc open fail here (CI caught it; macOS passes).
+        const errno_ptr = std.c._errno();
+        std.log.err("initLogFile open failed: errno={d} path={s}", .{ errno_ptr.*, path });
+        return error.OpenFailed;
+    }
     g_log_file = @intCast(fd);
     g_log_file_size = 0; // count this session's writes; rotation threshold is per-session
     g_log_max_size = if (max_size > 0) max_size else g_log_max_size;

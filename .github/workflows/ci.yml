@@ -177,9 +177,17 @@ jobs:
           done
 
       - name: Analyze (must be zero errors)
-        # Exit 0 unless there are error-level findings; warnings/infos are
-        # tracked locally (24w/127i) but don't fail the gate.
-        run: dart analyze --no-fatal-warnings --no-fatal-infos
+        # Gate on error-level findings only: warnings/infos are tracked
+        # locally (24w/127i) but don't fail the gate. dart analyze's exit
+        # code conflates levels (2/64 observed), so grep the report instead.
+        run: |
+          dart analyze --no-fatal-infos > analyze.log 2>&1 || true
+          cat analyze.log
+          if grep -qE "^ *error -" analyze.log; then
+            echo "ERROR-level findings — gate fails"
+            exit 1
+          fi
+          echo "analyze gate: no errors"
 
       - name: Test (zim_sdk protocol contract)
         working-directory: zim_sdk
