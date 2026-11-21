@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**Goal**: Rewrite OpenIM Server (Go → Zig) using [zigmodu](https://github.com/chy3xyz/zigmodu) framework.
+**Goal**: Rewrite OpenIM Server (Go → Zig) using [zmodu](https://github.com/chy3xyz/zmodu) framework.
 **Flutter/Expo frontend** (`_ref/openimsdk-open-im-flutter-enterprise/`) does NOT need changes.
 
 ## Repository Structure
@@ -10,7 +10,7 @@
 ```
 zim/
 ├── src/                      # Zig application
-│   ├── main.zig              # Bootstrap with zigmodu Application API
+│   ├── main.zig              # Bootstrap with zmodu Application API
 │   ├── core.zig              # Infrastructure layer: allocator, DI container, event bus, logger, validation
 │   ├── modules/              # Modulith modules
 │   │   ├── event_bus.zig      # Event-driven communication
@@ -25,7 +25,7 @@ zim/
 │   │   ├── office.zig         # Work moments (enterprise)
 │   │   ├── organization.zig   # Organization structure (enterprise)
 │   │   ├── third.zig          # Third-party services: RustFS object storage, FCM, logs, webhooks
-│   │   ├── gateway.zig        # HTTP + WebSocket server (120+ routes)
+│   │   ├── gateway.zig        # HTTP + WebSocket server (188 routes)
 │   │   ├── queue.zig          # PGMQ wrapper
 │   │   ├── push.zig           # Push notification worker
 │   │   ├── crontask.zig       # Background cron tasks: cleanup, webhook delivery
@@ -59,7 +59,7 @@ zim/
 | message | ✓ | Message CRUD, recall, delete, auto-sync conversation, options support |
 | group | ✓ | Group CRUD, member management |
 | friend | ✓ | Friend requests, blacklist (PostgreSQL-backed) |
-| gateway | ✓ | zigmodu http.Server + ComptimeRouter（185 条声明式路由，含 RTC 会议） |
+| gateway | ✓ | zmodu http.Server + ComptimeRouter（188 条声明式路由，含 RTC 会议） |
 | queue | ✓ | PGMQ message queue (PostgreSQL-backed) |
 | push | ✓ | Online push via WS 2001, offline queue via PGMQ, DND filter |
 | third | ✓ | RustFS S3-compatible presigned URLs, FCM token storage, logs, webhook queue |
@@ -107,7 +107,7 @@ psql -h localhost -U zim -d zim -f migrations/001_initial.sql
 ## Configuration
 
 Edit `config/config.yaml`:
-- INI 风格 `[section]` 段（由 zigmodu `YamlParser` 解析）：`[database]`、`[gateway]`、`[jwt]`、`[redis]`、`[queue]`、`[object_storage]`、`[webhook]`，键为 `http_port` / `ws_port` / `secret` 等
+- INI 风格 `[section]` 段（由 zmodu `YamlParser` 解析）：`[database]`、`[gateway]`、`[jwt]`、`[redis]`、`[queue]`、`[object_storage]`、`[webhook]`，键为 `http_port` / `ws_port` / `secret` 等
 - 旧缩进 YAML 格式仍被 `applyLegacy` 回退解析器兼容
 
 ## Implementation Status
@@ -406,7 +406,7 @@ All event types are defined centrally in `core.zig` for type safety across modul
 ### API Routes (Gateway)
 
 **Auth**: `POST /auth/get_user_token`, `POST /account/login`, `POST /account/register`, `POST /auth/verify`  
-**Gateway**: zigmodu `http.Server`（10000 端口）+ ComptimeRouter 185 条声明式路由；鉴权走 `authMiddleware`（公开路径白名单 + token 校验），CORS/OPTIONS 由 `corsMiddleware` 处理；handler 保持旧 `HttpRequest/HttpResponse` 模型，由 `bridge()` 适配层转发  
+**Gateway**: zmodu `http.Server`（10000 端口）+ ComptimeRouter 188 条声明式路由；鉴权走 `authMiddleware`（公开路径白名单 + token 校验），CORS/OPTIONS 由 `corsMiddleware` 处理；handler 全部为原生 `http.Context` 风格（Phase 34 起，bridge 适配层已删）  
 **User**: 18 endpoints including `/user/get_all_users_id`, `/user/search_users`, `/user/get_users_online_status`  
 **Friend**: 22 endpoints including `/friend/add_friend`, `/friend/get_black_list`  
 **Group**: 28 endpoints including `/group/create_group`, `/group/transfer_group`  
@@ -416,7 +416,7 @@ All event types are defined centrally in `core.zig` for type safety across modul
 **Organization**: 5 endpoints  
 **Third**: 7 endpoints (`/third/fcm_update_token` with DB persist, `/object/auth_sign` with presigned URL, `/object/access_url`, `/third/logs/upload`, `/third/logs/search`)  
 **Statistics**: 4 endpoints (`/statistics/user/register`, `/statistics/group/create`, etc.)  
-**RTC Meeting**: 19 endpoints with in-memory room state (`/rtc-meeting/create`, `/rtc-meeting/join`, etc.)  
+**RTC Meeting**: 19 endpoints, room state persisted in PostgreSQL since Phase 84 (`/rtc-meeting/create`, `/rtc-meeting/join`, etc.)  
 **Prometheus**: `/metrics` endpoint  
 
 ## Important Notes

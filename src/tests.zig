@@ -2082,3 +2082,73 @@ test "rtc: restart archives stale active rooms" {
     try std.testing.expectEqual(@as(i64, 2), row.status);
     try std.testing.expect(row.ended_at != null);
 }
+
+// ============================================================
+// Phase 88: third.searchLogs on zent — dynamic WHERE over the
+// four optional filters, count+page in one aliased scan
+// ============================================================
+test "zent: third searchLogs dynamic WHERE + pagination" {
+    const allocator = std.testing.allocator;
+    var ctx = IntegrationCtx.init(allocator) orelse return;
+    defer ctx.deinit();
+
+    const zent_db = @import("zent_db.zig");
+    if (zent_db.getDriver() == null) {
+        std.log.warn("[zent] layer not initialized — skipping", .{});
+        return;
+    }
+
+    const third_mod = @import("modules/third.zig");
+    const arena = ctx.arena_ptr.allocator();
+    const log_a = try ctx.uid("log_u1");
+    const log_b = try ctx.uid("log_u2");
+
+    // seed: log_a platform 1, log_b platform 2
+    try third_mod.saveLog(log_a, 1, "https://f/u1a.log");
+    try third_mod.saveLog(log_a, 1, "https://f/u1b.log");
+    try third_mod.saveLog(log_b, 2, "https://f/u2a.log");
+
+    // no filter: sees both users
+    const all = try third_mod.searchLogs(arena, null, null, null, null, 1, 50);
+    var u1_count: usize = 0;
+    var u2_count: usize = 0;
+    for (all.logs) |l| {
+        if (std.mem.eql(u8, l.user_id, log_a)) u1_count += 1;
+        if (std.mem.eql(u8, l.user_id, log_b)) u2_count += 1;
+    }
+    try std.testing.expectEqual(@as(usize, 2), u1_count);
+    try std.testing.expectEqual(@as(usize, 1), u2_count);
+    try std.testing.expect(all.total >= 3);
+
+    // user filter (single condition)
+    const by_user = try third_mod.searchLogs(arena, log_b, null, null, null, 1, 50);
+    try std.testing.expectEqual(@as(usize, 1), by_user.logs.len);
+    try std.testing.expectEqualStrings(log_b, by_user.logs[0].user_id);
+
+    // combined conditions: user_id + platform (both match)
+    const combined = try third_mod.searchLogs(arena, log_a, 1, null, null, 1, 50);
+    try std.testing.expectEqual(@as(usize, 2), combined.logs.len);
+    // combined: user_id matches but platform does not → empty
+    const mismatch = try third_mod.searchLogs(arena, log_a, 2, null, null, 1, 50);
+    try std.testing.expectEqual(@as(usize, 0), mismatch.logs.len);
+
+    // time window (last ~1h) catches the fresh rows; future window catches none
+    const now = core.unixNowSeconds();
+    const recent = try third_mod.searchLogs(arena, null, null, now - 3600, null, 1, 50);
+    try std.testing.expect(recent.total >= 3);
+    const future = try third_mod.searchLogs(arena, null, null, null, now - 7200, 1, 50);
+    try std.testing.expectEqual(@as(usize, 0), future.logs.len);
+
+    // pagination: DESC order, page 2 with size 1 differs from page 1
+    // (DB rows accumulate across test runs — assert relative order, not URLs)
+    const page1 = try third_mod.searchLogs(arena, log_a, null, null, null, 1, 1);
+    try std.testing.expectEqual(@as(usize, 1), page1.logs.len);
+    const page2 = try third_mod.searchLogs(arena, log_a, null, null, null, 2, 1);
+    try std.testing.expectEqual(@as(usize, 1), page2.logs.len);
+    try std.testing.expect(!std.mem.eql(u8, page1.logs[0].file_url, page2.logs[0].file_url));
+    // DESC ordering within one page-set: page 1 row is the newest
+    try std.testing.expect(page1.logs[0].created_at >= page2.logs[0].created_at);
+
+    // cleanup: test rows must not accumulate (0-residue principle)
+    _ = try zent_db.getDriver().?.exec("DELETE FROM app_logs WHERE file_url LIKE 'https://f/%'", &.{});
+}
