@@ -190,7 +190,7 @@ jobs:
           echo "analyze gate: no errors"
 
       - name: Test (zim_sdk protocol contract)
-        working-directory: zim_sdk
+        working-directory: ui/zimapp/zim_sdk
         run: flutter test test/message_model_test.dart
 
       - name: Build backend for e2e integration test
