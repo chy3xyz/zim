@@ -106,7 +106,10 @@ pub fn setAllowRegister(enabled: bool) !void {
 /// True when a users row exists for `user_id`.
 pub fn userExists(user_id: []const u8) bool {
     const drv = zent_db.getDriver() orelse return false;
-    const row = (zent.sql_scan.queryOne(struct { user_id: []const u8 }, core.getAllocator(), drv,
+    const row = (zent.sql_scan.queryOne(
+        struct { user_id: []const u8 },
+        core.getAllocator(),
+        drv,
         "SELECT user_id FROM users WHERE user_id = $1",
         &.{.{ .string = user_id }},
     ) catch return false) orelse return false;
