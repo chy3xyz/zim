@@ -378,7 +378,8 @@ fn beforeSendCallback(input: *model.MessageSendInput) !void {
     const content_json = std.json.Stringify.valueAlloc(allocator, input.content, .{}) catch return;
     defer allocator.free(content_json);
 
-    const payload = try std.fmt.allocPrint(allocator,
+    const payload = try std.fmt.allocPrint(
+        allocator,
         "{{\"sendID\":{s},\"recvID\":{s},\"groupID\":{s},\"sessionType\":{d},\"contentType\":{d},\"content\":{s}}}",
         .{ send_id_json, recv_id_json, group_id_json, @backingInt(input.session_type), @backingInt(input.content_type), content_json },
     );
