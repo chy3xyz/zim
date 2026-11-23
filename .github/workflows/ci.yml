@@ -163,6 +163,15 @@ jobs:
           ref: snap-2026-11-20
           path: zig_ws/zent
 
+      - name: Map dependency paths for build.zig.zon
+        # zon paths resolve from src/ upward THREE levels, landing one level
+        # outside the workspace — symlink the in-workspace checkouts there.
+        # (Absolute paths: this job's default cwd is ui/zimapp.)
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/../../zig_ws"
+          ln -s "$GITHUB_WORKSPACE/zig_ws/zigmodu" "$GITHUB_WORKSPACE/../../zig_ws/zigmodu"
+          ln -s "$GITHUB_WORKSPACE/zig_ws/zent" "$GITHUB_WORKSPACE/../../zig_ws/zent"
+
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
