@@ -2,6 +2,7 @@ const std = @import("std");
 const zmodu = @import("zmodu");
 const core = @import("core");
 const user_mod = @import("../../modules/user.zig");
+const admin_pers = @import("../admin/persistence.zig");
 const model = @import("model.zig");
 const persistence = @import("persistence.zig");
 
@@ -165,6 +166,8 @@ pub const AuthService = struct {
 
     pub fn loginWithPassword(self: *AuthService, user_id: []const u8, password: []const u8, platform_id: i32) !model.TokenInfo {
         if (!loginAllowed(user_id)) return error.TooManyAttempts;
+        // Admin block (Phase 89): banned accounts cannot log in.
+        if (admin_pers.isBlocked(user_id)) return error.BannedUser;
         const user = user_mod.getUser(user_id) catch null;
         if (user == null) return error.UserNotFound;
 
@@ -210,7 +213,15 @@ pub const AuthService = struct {
 
     pub fn getAdminToken(self: *AuthService, secret: []const u8, user_id: []const u8) !model.TokenInfo {
         if (!std.mem.eql(u8, secret, self.secret)) return error.InvalidSecret;
-        return self.generateToken(user_id, 1);
+        const info = try self.generateToken(user_id, 1);
+        // Persist — parseToken validates against auth_tokens, so an
+        // unpersisted token is unusable (pre-existing bug: every admin-token
+        // request 401'd because the token was never stored).
+        self.pers.storeToken(user_id, info.token, 1, self.expiry_hours) catch |err| {
+            std.log.err("storeToken failed for admin token: {}", .{err});
+            return error.InternalError;
+        };
+        return info;
     }
 
     pub fn sendVerificationCode(self: *AuthService, phone_number: ?[]const u8, email: ?[]const u8, area_code: ?[]const u8) ![]const u8 {

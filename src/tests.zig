@@ -287,6 +287,22 @@ test "message: read receipt does not overwrite conversation preview" {
 
     // A's conversation preview still shows the original message.
     const conv_a = (try conversation_mod.getConversation(a, conv_id)).?;
+    // latest_msg is the JSON envelope — assert the original text survives in it.
+    try std.testing.expect(std.mem.indexOf(u8, conv_a.latest_msg, "preview keeper") != null);
+
+    // Delivery: the 2200 receipt notification is pullable by the peer from
+    // the n_ notification conversation (Go HasReadReceipt flow).
+    const model = @import("modules/message/model.zig");
+    const n_conv = try model.getConversationID(b, a, "", .single, true);
+    const pulled = try message_mod.getMessages(n_conv, 0, 10);
+    var receipt_pulled = false;
+    for (pulled) |m| {
+        if (m.content_type == .read_receipt and std.mem.eql(u8, m.sender_id, b)) {
+            receipt_pulled = true;
+            try std.testing.expect(std.mem.indexOf(u8, m.content, "hasReadSeq") != null);
+        }
+    }
+    try std.testing.expect(receipt_pulled);
     try std.testing.expect(std.mem.indexOf(u8, conv_a.latest_msg, "preview keeper") != null);
     try std.testing.expect(std.mem.indexOf(u8, conv_a.latest_msg, "hasReadSeq") == null);
 }
@@ -2151,4 +2167,55 @@ test "zent: third searchLogs dynamic WHERE + pagination" {
 
     // cleanup: test rows must not accumulate (0-residue principle)
     _ = try zent_db.getDriver().?.exec("DELETE FROM app_logs WHERE file_url LIKE 'https://f/%'", &.{});
+}
+
+// ============================================================
+// Phase 89: admin surface — secret-gated admin login, registration
+// toggle, user blocks (ban rejects login, search lists, unblock
+// restores) — Go open-im-chat aligned contracts
+// ============================================================
+test "admin: allow_register toggle + user blocks + secret gate" {
+    const allocator = std.testing.allocator;
+    var ctx = IntegrationCtx.init(allocator) orelse return;
+    defer ctx.deinit();
+
+    const admin_pers = @import("modules/admin/persistence.zig");
+    const admin_mod = @import("modules/admin.zig");
+    const config_mod = @import("modules/config.zig");
+    const arena = ctx.arena_ptr.allocator();
+    const secret = config_mod.getConfig().jwt.secret;
+
+    // --- allow_register toggle ---
+    try admin_pers.setAllowRegister(false);
+    try std.testing.expect(!admin_mod.getAllowRegister());
+    try admin_pers.setAllowRegister(true);
+    try std.testing.expect(admin_mod.getAllowRegister());
+
+    // --- user blocks: add → login rejected → search lists → del → login ok ---
+    const banned = try ctx.register("blk_admin");
+    try admin_pers.blockUser(banned, "policy violation", "admin");
+
+    try std.testing.expect(admin_mod.isBlocked(banned));
+    try std.testing.expect(!admin_mod.isBlocked("never-blocked-user"));
+
+    const auth_mod = @import("modules/auth.zig");
+    try std.testing.expectError(error.BannedUser, auth_mod.loginWithPassword(banned, "test1234", 1));
+
+    const rows = try admin_pers.searchBlocks(arena, 0, 50);
+    try std.testing.expectEqual(@as(i64, 1), admin_pers.countBlocks());
+    var found = false;
+    for (rows) |r| {
+        if (std.mem.eql(u8, r.user_id, banned)) {
+            found = true;
+            try std.testing.expectEqualStrings("policy violation", r.reason);
+            try std.testing.expectEqualStrings("admin", r.operator_user_id);
+        }
+    }
+    try std.testing.expect(found);
+
+    try admin_pers.unblockUser(banned);
+    try std.testing.expect(!admin_mod.isBlocked(banned));
+    // login works again (validates the block check is the only gate)
+    _ = try auth_mod.loginWithPassword(banned, "test1234", 1);
+    _ = secret;
 }

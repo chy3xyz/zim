@@ -77,6 +77,12 @@ component [event_bus] {
   Event-driven communication module (backed by core infrastructure)
 }
 
+component [admin] {
+  Admin surface: registration toggle, user blocks (Go open-im-chat aligned)
+}
+
+admin --> config
+admin --> db_postgres
 component [third] {
   Third-party services: RustFS object storage, FCM tokens, logs
 }

@@ -24,6 +24,7 @@ const third_h = @import("handlers/third.zig");
 const statistics_h = @import("handlers/statistics.zig");
 const rtc_h = @import("handlers/rtc.zig");
 const jssdk_h = @import("handlers/jssdk.zig");
+const admin_h = @import("handlers/adminapi.zig");
 
 // Forwarded for modules/gateway.zig (keeps the public surface unchanged).
 pub const sendFail = helpers.sendFail;
@@ -288,11 +289,19 @@ pub const GatewayRoutes = struct {
         .{ .method = .GET, .path = "/metrics", .handler = health_h.handlePrometheusMetrics, .meta = .{ .auth = .public } },
     };
 
+    const admin_routes = [_]http.RouteSpec(State){
+        .{ .method = .POST, .path = "/admin/login", .handler = admin_h.handleAdminLogin, .meta = .{} },
+        .{ .method = .GET, .path = "/user/allow_register", .handler = admin_h.handleGetAllowRegister, .meta = .{} },
+        .{ .method = .PUT, .path = "/user/allow_register", .handler = admin_h.handleSetAllowRegister, .meta = .{} },
+        .{ .method = .POST, .path = "/block/add", .handler = admin_h.handleBlockAdd, .meta = .{} },
+        .{ .method = .POST, .path = "/block/del", .handler = admin_h.handleBlockDel, .meta = .{} },
+        .{ .method = .POST, .path = "/block/search", .handler = admin_h.handleBlockSearch, .meta = .{} },
+    };
     const jssdk_routes = [_]http.RouteSpec(State){
         // JSSdk (web session aggregation)
         .{ .method = .POST, .path = "/jssdk/get_conversations", .handler = jssdk_h.handleJssdkGetConversations, .meta = .{} },
         .{ .method = .POST, .path = "/jssdk/get_active_conversations", .handler = jssdk_h.handleJssdkGetActiveConversations, .meta = .{} },
     };
 
-    pub const routes = auth_routes ++ account_routes ++ health_routes ++ user_routes ++ friend_routes ++ group_routes ++ message_routes ++ conversation_routes ++ encryption_routes ++ office_routes ++ collect_routes ++ client_config_routes ++ organization_routes ++ third_routes ++ statistics_routes ++ rtc_routes ++ metrics_routes ++ jssdk_routes;
+    pub const routes = auth_routes ++ account_routes ++ health_routes ++ user_routes ++ friend_routes ++ group_routes ++ message_routes ++ conversation_routes ++ encryption_routes ++ office_routes ++ collect_routes ++ client_config_routes ++ organization_routes ++ third_routes ++ statistics_routes ++ rtc_routes ++ metrics_routes ++ jssdk_routes ++ admin_routes;
 };

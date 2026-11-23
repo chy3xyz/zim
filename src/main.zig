@@ -9,6 +9,7 @@ const event_bus = @import("modules/event_bus.zig");
 const db_postgres = @import("modules/db_postgres.zig");
 const user = @import("modules/user.zig");
 const auth = @import("modules/auth.zig");
+const admin = @import("modules/admin.zig");
 const conversation = @import("modules/conversation.zig");
 const message = @import("modules/message.zig");
 const group = @import("modules/group.zig");
@@ -265,6 +266,7 @@ pub fn main(init: std.process.Init) !void {
         config,
         event_bus,
         db_postgres,
+        admin,
         user,
         auth,
         conversation,

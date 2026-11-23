@@ -386,6 +386,17 @@ Edit `config/config.yaml`:
 - **信令 1004 投递收窄落地**（Phase 88 前尝试回退的专项，干净环境验证方案）：`handleWSSendSignalMsg` 用 `rtc_persistence.getParticipantIds` 收窄投递至房间参与者（未知房间回退广播保持带外信号流动）；`scripts/signal_smoke.py` 三连接探针（房主/参与者收、旁观者不收、发送者回显，手写 SignalReq protobuf 字段 1=room_id/2=signal_type(varint)/3=user_id/4=data）接入 frontend job CI 常态验证
 - **注意**：CI 用的 base64 是 **url_safe**（`handleReqMessage` 用 `url_safe.Decoder`）——标准字母表的 `+/` 在长 payload 会让解码失败，探针与客户端需对齐
 
+## Phase 89: chat 管理服务落地 + 已读回执投递闭环（遗留专项收官）
+
+- **已读回执项核实**：Phase 60 恢复后实现已完整（handler 发 2200 回执 + sync 跳过预览污染 + 测试）——本轮仅补**投递闭环断言**：对端可从 n_ 通知会话拉到 contentType=2200 的回执消息（含 hasReadSeq），并修正 preview 断言为 JSON 包络包含检查（latest_msg 是信封不是裸内容）
+- **admin 模块**（`modules/admin/` + gateway/handlers/adminapi.zig + migrations/015_admin_blocks.sql，Go open-im-chat admin 契约对齐）：
+  - 6 端点：`/admin/login`（公开）、`GET|PUT /user/allow_register`（注册开关，存 client_configs）、`POST /block/add|del|search`（封禁：admin_blocks 表 + 强制踢线 kickUser + 封禁登录拒绝 10005 + BlockUserInfo camelCase 列表）
+  - **鉴权双层**：token（authMiddleware，非公开路径）+ `X-Admin-Secret` 头比对 [jwt] secret（管理面板本就持有该 secret 做get_admin_token）
+  - **admin 账号播种**：模块启动 ensureAdminSeed——users 表 upsert `admin` 账号（PBKDF2([jwt] secret)，app_manager_level=1，存在则提升+改密）。设计依据：secret 本就是操作者持有的管理凭证，secret 轮换即管理员密码轮换
+  - **修复 pre-existing bug**：`getAdminToken` 只 generateToken 不 storeToken——发的是不入库的幽灵 token，后续请求全部 401（auth_tokens 外键还要求 user 存在——由播种解决）。管理面板 get_admin_token 链路从始至终是坏的，本轮修复并实测
+- **真实服务全链路验证**：get_admin_token（修复后 token 可用）→ allow_register off（注册 10005 拒绝）→ on（恢复）→ block add（目标登录 10005 "account blocked"）→ search（BlockUserInfo 契约）→ del（恢复）；**42/42 测试全过、CI 6/6 全绿**（新增 admin 生命周期测试 + 回执投递断言）
+- open-im-chat 剩余边界（注册验证码模板/邀请码/IP 风控/小程序管理）仍超 IM 边界，不在清单
+
 ## 遗留项（Phase 35 之后）
 
 - **gateway handler 已按域拆分**（Phase 49）：`gateway/handlers.zig` 4125 行拆为 298 行骨架 + `handlers/{helpers,auth,account,user,friend,group,message,conversation,encryption,office,organization,third,statistics,rtc,jssdk,health}.zig` 16 个域文件；新增 handler 遵循同结构
@@ -399,7 +410,7 @@ Edit `config/config.yaml`:
 - 约束提醒：新增路由直接写原生 `http.Context` 风格；zmodu 本地源码需保持 binary 帧支持（`WsMessageFn(session, msg, kind)`）；`config.yaml` 为 `[section]` INI 风格；新迁移文件放到 `migrations/`，启动时自动应用
 - **已落地专项（从遗留清单移除）**：配置热加载（Phase 65）、日志文件+轮转（Phase 64）、WS 真实连接测试（`scripts/ws_smoke.py`，Phase 70 起 CI 冒烟）、zent 迁移核心域事务（Phase 86-87 收官）、RTC 持久化（Phase 84）、可观测性（Phase 66 metrics/慢查询）
 - **已落地专项追加**：WS 信令 1004 投递收窄（Phase 88，房间参与者精确投递 + signal_smoke.py CI 常态验证）
-- **仍开放专项**：①Webhook 动态回调（BeforeSendMsg 响应驱动）与 attentionIds 之外的过滤；②已读回执通知（Phase 59 遗留的 libpq RETURNING 乱码专项——Phase 60 已修 UAF 根因，可重启尝试）；③chat 管理服务（open-im-chat，超 IM 边界）
+- **仍开放专项**：①Webhook 动态回调（BeforeSendMsg 响应驱动）与 attentionIds 之外的过滤。chat 管理服务与已读回执通知均已落地（Phase 89），从清单移除
 
 ### Event Bus
 

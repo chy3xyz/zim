@@ -7,6 +7,7 @@ const core = @import("core");
 const zmodu = @import("zmodu");
 const http = zmodu.http;
 const auth_mod = @import("../../auth.zig");
+const admin_mod = @import("../../admin.zig");
 const user_mod = @import("../../user.zig");
 const dto = @import("../dto.zig");
 const GatewayRoutes = @import("../handlers.zig").GatewayRoutes;
@@ -42,6 +43,8 @@ pub fn handleAccountLogin(ctx: *http.Context, _: *GatewayRoutes.State) anyerror!
     };
     if (req.password.len < 6) return sendFail(ctx, 400, "password too short");
     const user_id = req.account orelse req.phoneNumber orelse req.email orelse return sendFail(ctx, 400, "Missing user identifier");
+    // Admin block (Phase 89): banned accounts cannot log in.
+    if (admin_mod.isBlocked(user_id)) return sendFail(ctx, core.ErrorCode.forbidden, "account blocked");
     const token_info = auth_mod.loginWithPassword(user_id, req.password, req.platform) catch |err| {
         return sendFail(ctx, core.ErrorCode.internal_error, @errorName(err));
     };
@@ -76,6 +79,8 @@ pub fn handleAccountRegister(ctx: *http.Context, _: *GatewayRoutes.State) anyerr
     };
     if (req.user.nickname.len == 0) return sendFail(ctx, 400, "nickname required");
     if (req.user.password.len < 6) return sendFail(ctx, 400, "password too short");
+    // Admin registration toggle (Phase 89): /user/allow_register PUT flips it.
+    if (!admin_mod.getAllowRegister()) return sendFail(ctx, core.ErrorCode.forbidden, "registration is disabled");
     const user_id = req.user.account orelse req.user.phoneNumber orelse req.user.email orelse blk: {
         var bytes: [16]u8 = undefined;
         core.secureRandomBytes(&bytes);
