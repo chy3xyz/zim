@@ -2219,3 +2219,33 @@ test "admin: allow_register toggle + user blocks + secret gate" {
     _ = try auth_mod.loginWithPassword(banned, "test1234", 1);
     _ = secret;
 }
+
+// ============================================================
+// Phase 90: BeforeSendMsg webhook callback — response contract
+// parser (allow / reject / modify) + send-path integration
+// ============================================================
+test "webhook: parseWebhookResponse contract" {
+    const allocator = std.testing.allocator;
+    const service_mod = @import("modules/message/service.zig");
+
+    // allow
+    const a = try service_mod.parseWebhookResponse(allocator, "{\"errCode\":0}");
+    try std.testing.expect(a == .allow);
+    const empty = try service_mod.parseWebhookResponse(allocator, "{}");
+    try std.testing.expect(empty == .allow);
+
+    // reject (errCode non-zero, both int and float forms)
+    const r = try service_mod.parseWebhookResponse(allocator, "{\"errCode\":403,\"errMsg\":\"banned word\"}");
+    try std.testing.expect(r == .reject);
+    const rf = try service_mod.parseWebhookResponse(allocator, "{\"errCode\":403.0}");
+    try std.testing.expect(rf == .reject);
+
+    // modify (content string replaces the message body)
+    const m = try service_mod.parseWebhookResponse(allocator, "{\"errCode\":0,\"content\":\"cleaned\"}");
+    try std.testing.expect(m == .modify);
+    defer allocator.free(m.modify);
+    try std.testing.expectEqualStrings("cleaned", m.modify);
+
+    // malformed body → InvalidJson (caller treats as allow)
+    try std.testing.expectError(error.InvalidJson, service_mod.parseWebhookResponse(allocator, "not json"));
+}

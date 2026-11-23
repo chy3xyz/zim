@@ -100,7 +100,9 @@ jobs:
           $GITHUB_WORKSPACE/.zmodu-ci/bin/zmodu audit .
           $GITHUB_WORKSPACE/.zmodu-ci/bin/zmodu deadcode .
 
-      - name: Smoke (boot + health)
+      - name: Smoke (boot + health + WS + signal)
+        # Full parity with scripts/ci.sh [6/6]: real handshake + GetMaxSeq
+        # protocol check, then the 1004 room-scoping assertions.
         working-directory: src
         run: |
           ./zig-out/bin/zim > /tmp/zim-ci.log 2>&1 &
@@ -109,6 +111,8 @@ jobs:
             sleep 0.5
           done
           curl -sf http://localhost:10000/health >/dev/null || { cat /tmp/zim-ci.log; exit 1; }
+          python3 ../scripts/ws_smoke.py 10000 10001
+          python3 ../scripts/signal_smoke.py
           pkill -f zig-out/bin/zim || true
 
   frontend:

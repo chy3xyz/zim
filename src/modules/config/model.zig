@@ -56,6 +56,10 @@ pub const WebhookConfig = struct {
     /// When non-empty, type filtering only applies to messages whose sender
     /// or receiver is in this comma-separated user-id list (Go attentionIds).
     attention_ids: []const u8 = "",
+    /// Before-send sync callback (Go callbackBeforeSendMsg): when non-empty,
+    /// single/group message sends POST the message here and the JSON response
+    /// gates the send (errCode != 0 → reject; "content" field → replace).
+    before_send_url: []const u8 = "",
 };
 
 pub const Config = struct {

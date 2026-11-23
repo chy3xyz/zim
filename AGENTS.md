@@ -406,7 +406,7 @@ Edit `config/config.yaml`:
 - **gateway 路由已按域分组**（Phase 37）：17 个 `*_routes` const；后续如需可继续把 handler 实现拆到 `handlers/{域}.zig`
 - **结构化日志**：访问日志已是每请求一行 JSON（std.log 输出）；其余模块仍为 `std.log` 风格，如需要可接 zigmodu `StructuredLogger`（修复其 bug 后）或继续 std.log JSON
 - **功能对照**：消息分页/搜索增强、群公告/@提及、RTC 持久化等见 `docs/go-zig-gap-analysis.md` 与 `docs/improvement-plan.md`
-- **CI 门禁**：`scripts/ci.sh` 一键五步门禁（build/test/fmt/audit/deadcode），zmodu 优先用 `.zmodu-build/bin/zmodu`（本地构建 v0.15.9，含 audit/deadcode）否则 PATH
+- **CI 门禁**：`scripts/ci.sh` 一键六步门禁（build/test/fmt/audit/deadcode/smoke+WS+signal），zmodu 优先用 `.zmodu-build/bin/zmodu` 否则 PATH
 - 约束提醒：新增路由直接写原生 `http.Context` 风格；zmodu 本地源码需保持 binary 帧支持（`WsMessageFn(session, msg, kind)`）；`config.yaml` 为 `[section]` INI 风格；新迁移文件放到 `migrations/`，启动时自动应用
 - **已落地专项（从遗留清单移除）**：配置热加载（Phase 65）、日志文件+轮转（Phase 64）、WS 真实连接测试（`scripts/ws_smoke.py`，Phase 70 起 CI 冒烟）、zent 迁移核心域事务（Phase 86-87 收官）、RTC 持久化（Phase 84）、可观测性（Phase 66 metrics/慢查询）
 - **已落地专项追加**：WS 信令 1004 投递收窄（Phase 88，房间参与者精确投递 + signal_smoke.py CI 常态验证）

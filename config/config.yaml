@@ -41,6 +41,7 @@ enabled: false
 allowed_types: ""
 denied_types: ""
 attention_ids: ""
+before_send_url: ""
 
 [log]
 file: ""

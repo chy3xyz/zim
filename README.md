@@ -1,5 +1,7 @@
 # zim — OpenIM Server rewritten in Zig
 
+[![CI](https://github.com/chy3xyz/zim/actions/workflows/ci.yml/badge.svg)](https://github.com/chy3xyz/zim/actions/workflows/ci.yml)
+
 A single-process rewrite of the [OpenIM Server](https://github.com/openimsdk/open-im-server) (Go microservices → **17-module Zig Modulith**, ~53k lines), wire-compatible with the OpenIM Flutter SDK.
 
 [中文文档](README_CN.md)

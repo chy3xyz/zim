@@ -1,8 +1,10 @@
 const std = @import("std");
+const zmodu = @import("zmodu");
 const core = @import("core");
 const db_mod = @import("../db_postgres.zig");
 const event_bus_mod = @import("../event_bus.zig");
 const conversation_mod = @import("../conversation.zig");
+const config_mod = @import("../config.zig");
 const friend_mod = @import("../friend.zig");
 const group_mod = @import("../group.zig");
 const model = @import("model.zig");
@@ -126,6 +128,10 @@ pub const MessageService = struct {
         try validateMessage(input);
 
         var modified_input = input;
+        // Before-send sync webhook (Phase 90, Go callbackBeforeSendMsg):
+        // response gates the send (errCode != 0 → reject) and may replace
+        // the content (content moderation pattern).
+        try beforeSendCallback(&modified_input);
         switch (input.content_type) {
             .typing => {
                 modified_input.options.is_history = false;
@@ -352,6 +358,93 @@ pub const MessageService = struct {
 /// Auto-create or update conversation after message sent — transactional
 /// variant running on the caller's Tx so message insert + conversation sync
 /// commit or roll back together (no orphan messages).
+/// Before-send sync webhook (Phase 90, Go callbackBeforeSendMsg).
+/// Rejects with error.WebhookRejected when the response errCode != 0, and
+/// replaces `input.content` when the response carries a "content" string
+/// (content moderation pattern). Network/HTTP failures allow the send with
+/// a warn log (availability over moderation — Go's default when a callback
+/// is unreachable). Callback timeout: 3s.
+fn beforeSendCallback(input: *model.MessageSendInput) !void {
+    const cfg = config_mod.getConfig().webhook;
+    if (cfg.before_send_url.len == 0) return;
+
+    const allocator = core.getAllocator();
+    const send_id_json = std.json.Stringify.valueAlloc(allocator, input.send_id, .{}) catch return;
+    defer allocator.free(send_id_json);
+    const recv_id_json = std.json.Stringify.valueAlloc(allocator, input.recv_id, .{}) catch return;
+    defer allocator.free(recv_id_json);
+    const group_id_json = std.json.Stringify.valueAlloc(allocator, input.group_id, .{}) catch return;
+    defer allocator.free(group_id_json);
+    const content_json = std.json.Stringify.valueAlloc(allocator, input.content, .{}) catch return;
+    defer allocator.free(content_json);
+
+    const payload = try std.fmt.allocPrint(allocator,
+        "{{\"sendID\":{s},\"recvID\":{s},\"groupID\":{s},\"sessionType\":{d},\"contentType\":{d},\"content\":{s}}}",
+        .{ send_id_json, recv_id_json, group_id_json, @backingInt(input.session_type), @backingInt(input.content_type), content_json },
+    );
+    defer allocator.free(payload);
+
+    var client = zmodu.http.HttpClient.init(allocator, core.getIo(), 1, 3000);
+    defer client.deinit();
+    var req = zmodu.http.HttpClient.HttpRequest.init(allocator, "POST", cfg.before_send_url);
+    defer req.deinit();
+    try req.setHeader("Content-Type", "application/json");
+    try req.setBody(payload);
+    var resp = client.request(req) catch |err| {
+        core.logJson(.{ .event = "webhook_before_send_unreachable", .err = @errorName(err) });
+        return; // continue-with-log
+    };
+    defer resp.deinit();
+    if (!resp.isSuccess()) {
+        core.logJson(.{ .event = "webhook_before_send_http_error", .status = resp.status_code });
+        return; // continue-with-log
+    }
+
+    const action = parseWebhookResponse(allocator, resp.body) catch {
+        core.logJson(.{ .event = "webhook_before_send_bad_response" });
+        return; // malformed response treated as allow
+    };
+    switch (action) {
+        .reject => {
+            core.logJson(.{ .event = "webhook_before_send_reject", .send_id = input.send_id });
+            return error.WebhookRejected;
+        },
+        .modify => |new_content| {
+            input.content = try allocator.dupe(u8, new_content);
+        },
+        .allow => {},
+    }
+}
+
+/// Before-send callback response contract (Go callbackBeforeSendMsg):
+/// `errCode` non-zero → reject; a string `content` field → replace content;
+/// everything else → allow.
+pub const WebhookAction = union(enum) {
+    allow,
+    reject,
+    modify: []const u8,
+};
+
+pub fn parseWebhookResponse(allocator: std.mem.Allocator, body: []const u8) !WebhookAction {
+    const parsed = std.json.parseFromSlice(std.json.Value, allocator, body, .{}) catch return error.InvalidJson;
+    defer parsed.deinit();
+    if (parsed.value != .object) return error.InvalidJson;
+    const obj = parsed.value.object;
+
+    if (obj.get("errCode")) |v| {
+        switch (v) {
+            .integer => |n| if (n != 0) return .reject,
+            .float => |f| if (f != 0) return .reject,
+            else => {},
+        }
+    }
+    if (obj.get("content")) |v| {
+        // dupe BEFORE parsed.deinit() frees the parser-owned string
+        if (v == .string) return .{ .modify = try allocator.dupe(u8, v.string) };
+    }
+    return .allow;
+}
+
 fn syncConversationTx(tx: *db_mod.Tx, msg: model.Message, at_all: bool, at_users: []const []const u8) !void {
     const allocator = core.getAllocator();
 

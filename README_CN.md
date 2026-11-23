@@ -1,5 +1,7 @@
 # zim — 用 Zig 重写的 OpenIM Server
 
+[![CI](https://github.com/chy3xyz/zim/actions/workflows/ci.yml/badge.svg)](https://github.com/chy3xyz/zim/actions/workflows/ci.yml)
+
 [OpenIM Server](https://github.com/openimsdk/open-im-server) 的单进程重写：Go 微服务（10+）→ **17 模块 Zig Modulith**（约 5.3 万行），与 OpenIM Flutter SDK 线协议兼容。
 
 [English](README.md)

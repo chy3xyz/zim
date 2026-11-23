@@ -77,6 +77,7 @@ pub const ConfigService = struct {
                 .allowed_types = "",
                 .denied_types = "",
                 .attention_ids = "",
+                .before_send_url = "",
             },
         };
     }
@@ -161,6 +162,7 @@ fn applyYaml(allocator: std.mem.Allocator, content: []const u8, cfg: *model.Conf
     if (map.get("webhook.allowed_types")) |v| cfg.webhook.allowed_types = try dupeStr(allocator, v);
     if (map.get("webhook.denied_types")) |v| cfg.webhook.denied_types = try dupeStr(allocator, v);
     if (map.get("webhook.attention_ids")) |v| cfg.webhook.attention_ids = try dupeStr(allocator, v);
+    if (map.get("webhook.before_send_url")) |v| cfg.webhook.before_send_url = try dupeStr(allocator, v);
     if (map.get("log.file")) |v| cfg.log.file = try dupeStr(allocator, v);
     if (map.get("log.max_size")) |v| cfg.log.max_size = std.fmt.parseInt(u64, std.mem.trim(u8, v, " \t\r\n"), 10) catch cfg.log.max_size;
 
@@ -208,6 +210,7 @@ fn applyLegacy(allocator: std.mem.Allocator, c: []const u8, cfg: *model.Config) 
     if (parseString(c, "allowed_types:", "webhook")) |v| cfg.webhook.allowed_types = try dupeStr(allocator, v);
     if (parseString(c, "denied_types:", "webhook")) |v| cfg.webhook.denied_types = try dupeStr(allocator, v);
     if (parseString(c, "attention_ids:", "webhook")) |v| cfg.webhook.attention_ids = try dupeStr(allocator, v);
+    if (parseString(c, "before_send_url:", "webhook")) |v| cfg.webhook.before_send_url = try dupeStr(allocator, v);
     if (parseString(c, "file:", "log")) |v| cfg.log.file = try dupeStr(allocator, v);
     if (parseString(c, "max_size:", "log")) |v| cfg.log.max_size = std.fmt.parseInt(u64, std.mem.trim(u8, v, " \t\r\n"), 10) catch cfg.log.max_size;
     if (parseString(c, "enabled:", "webhook")) |v| {
