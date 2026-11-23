@@ -214,6 +214,10 @@ jobs:
           done
           curl -sf http://localhost:10000/health >/dev/null || { cat /tmp/zim-e2e-ci.log; exit 1; }
 
+      - name: Signal scope smoke (1004 room scoping)
+        working-directory: src
+        run: python3 ../scripts/signal_smoke.py
+
       - name: E2E integration test (flutter SDK ↔ zim backend)
         working-directory: ui/zimapp/zim_sdk
         run: flutter test test/backend_integration_test.dart

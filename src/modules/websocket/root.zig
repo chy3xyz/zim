@@ -281,6 +281,7 @@ fn onConnect(ctx: *zmodu.http.Context, framer: *anyopaque) ?*anyopaque {
 
 fn onMessage(session: ?*anyopaque, msg: []const u8, kind: zmodu.im.WsFrameKind) void {
     const client: *WSClient = @ptrCast(@alignCast(session orelse return));
+    std.log.info("[WSDBG] onMessage kind={s} len={d} user={s}", .{ @tagName(kind), msg.len, client.user_id });
     switch (kind) {
         .text => {
             if (service.isTextPing(msg)) {
@@ -463,6 +464,8 @@ fn handleWSSendSignalMsg(client: *WSClient, req_id: i32, msg_incr: []const u8, o
         core.getAllocator().free(signal_req.data);
     }
 
+    core.logJson(.{ .event = "ws_signal", .room = signal_req.room_id, .user = signal_req.user_id, .signal_type = signal_req.signal_type });
+
     const resp = sdkws.SignalResp{
         .room_id = signal_req.room_id,
         .signal_type = signal_req.signal_type,
@@ -475,15 +478,38 @@ fn handleWSSendSignalMsg(client: *WSClient, req_id: i32, msg_incr: []const u8, o
     };
     defer core.getAllocator().free(resp_bytes);
 
+    // Phase 88: deliver signaling to the room's participants only (was:
+    // broadcast to every authenticated client — a privacy/traffic leak for
+    // anyone not in the room). Unknown room falls back to the legacy
+    // broadcast so out-of-band signals keep flowing.
+    const participants: ?[]const []const u8 = blk: {
+        const ids = @import("../gateway/rtc_persistence.zig").getParticipantIds(signal_req.room_id) catch |err| {
+            core.logJson(.{ .event = "ws_signal_participants", .err = @errorName(err) });
+            break :blk null;
+        };
+        core.logJson(.{ .event = "ws_signal_participants", .count = ids.len });
+        if (ids.len == 0) break :blk null;
+        break :blk ids;
+    };
+
     lockMutex();
     defer g_clients_mutex.unlock();
     var it = g_clients.iterator();
     while (it.next()) |entry| {
         const client_list = entry.value_ptr.*;
         for (client_list.items) |other| {
-            if (other.is_authenticated and !std.mem.eql(u8, other.user_id, client.user_id)) {
-                model.sendWSResponse(other, req_id, "", "", 0, "", resp_bytes);
+            if (!other.is_authenticated or std.mem.eql(u8, other.user_id, client.user_id)) continue;
+            if (participants) |ids| {
+                var in_room = false;
+                for (ids) |pid| {
+                    if (std.mem.eql(u8, pid, other.user_id)) {
+                        in_room = true;
+                        break;
+                    }
+                }
+                if (!in_room) continue;
             }
+            model.sendWSResponse(other, req_id, "", "", 0, "", resp_bytes);
         }
     }
 

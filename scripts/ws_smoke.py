@@ -54,18 +54,23 @@ def ws_connect(host, port, query):
 
 
 def ws_send_text(sock, text):
+    # RFC 6455 §5.3: client-to-server frames MUST be masked. The server
+    # rejects unmasked client frames (UnmaskedClientFrame → close).
     payload = text.encode()
     header = bytearray([0x81])
     n = len(payload)
     if n < 126:
-        header.append(n)
+        header.append(n | 0x80)
     elif n < 65536:
-        header.append(126)
+        header.append(126 | 0x80)
         header += struct.pack(">H", n)
     else:
-        header.append(127)
+        header.append(127 | 0x80)
         header += struct.pack(">Q", n)
-    sock.sendall(bytes(header) + payload)
+    mask = list(os.urandom(4))
+    header += bytes(mask)
+    masked = bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
+    sock.sendall(bytes(header) + masked)
 
 
 def ws_recv_text(sock):
@@ -115,7 +120,16 @@ def main():
     # 3. GetMaxSeq (1001) request
     data_b64 = base64.b64encode(proto_get_max_seq_req(uid)).decode()
     ws_send_text(sock, json.dumps({"reqIdentifier": 1001, "sendID": uid, "data": data_b64}))
-    resp = json.loads(ws_recv_text(sock))
+    # STRICT: drain any 2100 config frames until the actual 1001 response
+    # arrives — a 2100-only read means the request was never processed.
+    resp = None
+    for _ in range(5):
+        r = json.loads(ws_recv_text(sock))
+        if r.get("reqIdentifier") == 1001:
+            resp = r
+            break
+    if resp is None:
+        raise RuntimeError("no 1001 GetMaxSeq response (request never processed)")
     print(f"WS response: reqIdentifier={resp.get('reqIdentifier')} errCode={resp.get('errCode')}")
     if resp.get("errCode") != 0:
         raise RuntimeError(f"GetMaxSeq failed: {resp}")

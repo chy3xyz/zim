@@ -372,6 +372,20 @@ Edit `config/config.yaml`:
 - **ReleaseFast 基线复测（Phase 87 后）**：login 75-78 / friend 2667 / group 2632-2740 / msg 1070-1111 ops/s —— 零回归，msg +61~67%、group +49~55%（旧基线的 664/1770 系噪声低估）；docs/benchmark.md 已更新口径表
 - 本轮提交：5a70cca（Phase 83-87）
 
+## Phase 88: 首次 GitHub CI 全绿 + 信令收窄落地（干净环境验证）
+
+- **CI 首绿里程碑**（run 45091832445）：7 轮迭代修复后 test + frontend 双 job 全绿——test job（build/test/fmt/audit 0/deadcode 0/smoke+WS 六门禁，2m22s）、frontend job（analyze 零 error 门禁 + zim_sdk 契约测试 + 后端构建启动 + **Flutter↔zim E2E 全链路 1 test passed**，4m1s）。E2E 此前因本地 flutter SDK 移除无法验证，现由 CI 干净 runner 常态保障
+- **CI 修复链**（7 处环境差异，均有教训价值）：
+  1. postgres service 容器拒绝无密码初始化 → `POSTGRES_HOST_AUTH_METHOD: trust`（本地 trust 配置在 config 外，CI 需显式）
+  2. dev.1970 tarball 404（ziglang.org GC 旧 dev 构建）→ pin **0.17.1 stable**（永久 URL；本地隔离验证 0.17.1 干净缓存 41/41 全过——stable 兼容）
+  3. actions/checkout 拒绝 workspace 外 path → 依赖 checkout 移入 `zig_ws/` + **symlink 映射** zon 解析层级（src 上跳三级 = workspace 外一级，`$GITHUB_WORKSPACE/../../zig_ws`）
+  4. dart analyze exit 2/64 语义混淆（151 issues 全 warning/info 无 error）→ 门禁改显式 `grep "^ *error -"`（级别语义不再依赖 exit code）
+  5. **g_clients undefined 全局读 UB**（Linux 对齐断言崩，macOS 碰巧活）：push 测试不经 websocket 模块 init，事件链 push→pushOnlineStatusChange→isUserBackground 读 undefined map——四个公开入口（isUserBackground/pushOnlineStatusChange/pushToUser/pushToUsers）加 `g_initialized` 守卫。教训：跨模块事件订阅链的入口必须对"本模块未启动"防御
+  6. **initLogFile open flags 平台 bug**（Linux ENOENT，本地残留文件掩盖）：`0x0200` 是 macOS 的 O_CREAT，Linux 上是 O_TRUNC——flags 按 `builtin.os.tag` 分支。教训：libc 常量禁止跨平台复用数值
+  7. zim_sdk 测试步骤 working-directory 解析（per-step 相对 workspace 根）+ frontend job 漏配 Map 步骤（python replace 锚点未命中静默跳过——多次编辑后必须 grep 复核每一处）
+- **信令 1004 投递收窄落地**（Phase 88 前尝试回退的专项，干净环境验证方案）：`handleWSSendSignalMsg` 用 `rtc_persistence.getParticipantIds` 收窄投递至房间参与者（未知房间回退广播保持带外信号流动）；`scripts/signal_smoke.py` 三连接探针（房主/参与者收、旁观者不收、发送者回显，手写 SignalReq protobuf 字段 1=room_id/2=signal_type(varint)/3=user_id/4=data）接入 frontend job CI 常态验证
+- **注意**：CI 用的 base64 是 **url_safe**（`handleReqMessage` 用 `url_safe.Decoder`）——标准字母表的 `+/` 在长 payload 会让解码失败，探针与客户端需对齐
+
 ## 遗留项（Phase 35 之后）
 
 - **gateway handler 已按域拆分**（Phase 49）：`gateway/handlers.zig` 4125 行拆为 298 行骨架 + `handlers/{helpers,auth,account,user,friend,group,message,conversation,encryption,office,organization,third,statistics,rtc,jssdk,health}.zig` 16 个域文件；新增 handler 遵循同结构
@@ -384,7 +398,8 @@ Edit `config/config.yaml`:
 - **CI 门禁**：`scripts/ci.sh` 一键五步门禁（build/test/fmt/audit/deadcode），zmodu 优先用 `.zmodu-build/bin/zmodu`（本地构建 v0.15.9，含 audit/deadcode）否则 PATH
 - 约束提醒：新增路由直接写原生 `http.Context` 风格；zmodu 本地源码需保持 binary 帧支持（`WsMessageFn(session, msg, kind)`）；`config.yaml` 为 `[section]` INI 风格；新迁移文件放到 `migrations/`，启动时自动应用
 - **已落地专项（从遗留清单移除）**：配置热加载（Phase 65）、日志文件+轮转（Phase 64）、WS 真实连接测试（`scripts/ws_smoke.py`，Phase 70 起 CI 冒烟）、zent 迁移核心域事务（Phase 86-87 收官）、RTC 持久化（Phase 84）、可观测性（Phase 66 metrics/慢查询）
-- **仍开放专项**：①WS 信令 1004 投递范围收窄（现为全网 authenticated 广播；已尝试用 `rtc_persistence.getParticipantIds` 收窄至房间参与者并回退——python 验证端需手写 SignalReq protobuf 编码（字段 1=room_id/2=signal_type/3=user_id/4=data，varint/bytes 均已验证可行），阻塞点是测试环境的端口分流干扰，需干净环境复验）；②Webhook 动态回调（BeforeSendMsg 响应驱动）与 attentionIds 之外的过滤；③已读回执通知（Phase 59 遗留的 libpq RETURNING 乱码专项——Phase 60 已修 UAF 根因，可重启尝试）；④chat 管理服务（open-im-chat，超 IM 边界）
+- **已落地专项追加**：WS 信令 1004 投递收窄（Phase 88，房间参与者精确投递 + signal_smoke.py CI 常态验证）
+- **仍开放专项**：①Webhook 动态回调（BeforeSendMsg 响应驱动）与 attentionIds 之外的过滤；②已读回执通知（Phase 59 遗留的 libpq RETURNING 乱码专项——Phase 60 已修 UAF 根因，可重启尝试）；③chat 管理服务（open-im-chat，超 IM 边界）
 
 ### Event Bus
 
