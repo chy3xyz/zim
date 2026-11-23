@@ -397,6 +397,17 @@ Edit `config/config.yaml`:
 - **真实服务全链路验证**：get_admin_token（修复后 token 可用）→ allow_register off（注册 10005 拒绝）→ on（恢复）→ block add（目标登录 10005 "account blocked"）→ search（BlockUserInfo 契约）→ del（恢复）；**42/42 测试全过、CI 6/6 全绿**（新增 admin 生命周期测试 + 回执投递断言）
 - open-im-chat 剩余边界（注册验证码模板/邀请码/IP 风控/小程序管理）仍超 IM 边界，不在清单
 
+## Phase 90: BeforeSendMsg 动态回调 + CI 冒烟对等升级
+
+- **BeforeSendMsg 同步回调**（Go callbackBeforeSendMsg 对齐，[webhook] 新增 `before_send_url`）：
+  - 发送路径集成点：validateMessage 之后、事务开启之前（回调耗时不应占事务连接）；单聊/群/WS 1003 全走此口
+  - payload 用 `Stringify.valueAlloc` 逐字段转义（content 是任意用户文本，禁止 fmt 插值——JSON 注入面）；响应三态：errCode!=0 → 10016 WebhookRejected；content 字符串 → 改写消息体（内容审核模式，dupe 后调用方持有）；网络/HTTP 失败 → 放行保可用（3s 超时，Go 缺省语义）
+  - **真实服务三场景验证**（python 回调服务器 :19555）：allow（回调收到精确转义 payload + 消息正常落库）/ reject（10016 WebhookRejected）/ modify（DB 行 content="cleaned text" 端到端改写）
+  - 探针教训：①`Stringify.valueAlloc` 是 0.17 的分配 API（`.writer(allocator)` 不可用于 `ArrayList.empty`）②回执投递断言抓出 `parsed.deinit()` 后返回 parser 字符串的悬空（dupe 前置）③**门禁管道陷阱**：`bash ci.sh | tail -3 && commit` 中 tail 掩盖 ci.sh 退出码，fmt 失败照样提交——门禁管道必须 `set -o pipefail` 或去管道直跑
+- **CI test job 冒烟对等升级**：冒烟步骤从"boot+health"升级为与 ci.sh [6/6] 全对等——boot + health + **WS 真实握手/GetMaxSeq 严格断言**（排空 2100 后必须收到 1001）+ **信令 1004 范围探针**（参与者收/旁观者抑制/回显）——Linux 门禁常态覆盖 WS 协议与信令回归（g_clients UB 即此类）
+- 43/43 测试全过、CI 双 job 全绿（fmt 修复后 run 45116521011）；README 双语 CI 徽章上线；AGENTS.md 陈旧"五步门禁/v0.15.9"行修正
+- 本轮提交：da48765（功能）+ 09ffa24（fmt）
+
 ## 遗留项（Phase 35 之后）
 
 - **gateway handler 已按域拆分**（Phase 49）：`gateway/handlers.zig` 4125 行拆为 298 行骨架 + `handlers/{helpers,auth,account,user,friend,group,message,conversation,encryption,office,organization,third,statistics,rtc,jssdk,health}.zig` 16 个域文件；新增 handler 遵循同结构
@@ -410,7 +421,8 @@ Edit `config/config.yaml`:
 - 约束提醒：新增路由直接写原生 `http.Context` 风格；zmodu 本地源码需保持 binary 帧支持（`WsMessageFn(session, msg, kind)`）；`config.yaml` 为 `[section]` INI 风格；新迁移文件放到 `migrations/`，启动时自动应用
 - **已落地专项（从遗留清单移除）**：配置热加载（Phase 65）、日志文件+轮转（Phase 64）、WS 真实连接测试（`scripts/ws_smoke.py`，Phase 70 起 CI 冒烟）、zent 迁移核心域事务（Phase 86-87 收官）、RTC 持久化（Phase 84）、可观测性（Phase 66 metrics/慢查询）
 - **已落地专项追加**：WS 信令 1004 投递收窄（Phase 88，房间参与者精确投递 + signal_smoke.py CI 常态验证）
-- **仍开放专项**：①Webhook 动态回调（BeforeSendMsg 响应驱动）与 attentionIds 之外的过滤。chat 管理服务与已读回执通知均已落地（Phase 89），从清单移除
+- **已落地专项追加**：BeforeSendMsg 动态回调（Phase 90，allow/reject/modify 三态 + signal_smoke/ws_smoke CI 门禁）
+- **仍开放专项**：仅剩超 IM 边界的 open-im-chat 完整对等（注册验证码模板/邀请码/IP 风控/小程序管理——产品级清单已标注不在范围）
 
 ### Event Bus
 
